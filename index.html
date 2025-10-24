@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media Library</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* VARIABLES */
+    :root {
+      --bg-color: #0d0d0d; /* Deeper background */
+      --card-bg: #1a1a1a;
+      --text-color: #ffffff; /* Pure white text */
+      --accent-color: #a855f7; /* Changed to Vibrant Purple */
+      --secondary-text: #b3b3b3;
+      --border-color: #333333;
+    }
+
+    /* GLOBAL STYLES */
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* HEADER/TOOLBAR */
+    .header {
+      padding: 1rem 2rem;
+      background-color: #000;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      border-bottom: 1px solid var(--accent-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .header-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent-color);
+      letter-spacing: 1.5px;
+    }
+
+    /* CONTROLS */
+    .scan-button, .play-button {
+      background-color: var(--accent-color);
+      color: var(--text-color);
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px; /* Slightly more rounded */
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .scan-button:hover, .play-button:hover {
+      background-color: #c084fc; /* Brighter purple on hover */
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
+    }
+    
+    .scan-button:disabled {
+      background-color: var(--border-color);
+      color: var(--secondary-text);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* MAIN CONTENT AREA */
+    .content-area {
+      flex-grow: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* SIDEBAR (SHOWS LIST) */
+    .sidebar {
+      width: 280px; /* Wider sidebar */
+      background-color: var(--card-bg);
+      padding: 1rem 0;
+      overflow-y: auto;
+      border-right: 1px solid var(--border-color);
+      flex-shrink: 0;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.3);
+    }
+
+    .show-list-item {
+      padding: 0.75rem 1.5rem;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 1rem;
+      border-left: 4px solid transparent;
+      transition: background-color 0.15s, border-left-color 0.15s;
+    }
+
+    .show-list-item:hover {
+      background-color: #2b2b2b;
+    }
+
+    .show-list-item.selected {
+      background-color: #2b2b2b; /* Darker than background, but selected */
+      border-left-color: var(--accent-color);
+      font-weight: 700;
+    }
+    
+    .sidebar-title {
+        padding: 0 1.5rem 0.75rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--secondary-text);
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 1rem;
+    }
+
+    /* DETAIL VIEW (SEASONS/EPISODES) */
+    .detail-view {
+      flex-grow: 1;
+      padding: 3rem; /* More padding */
+      overflow-y: auto;
+    }
+
+    .show-header {
+      margin-bottom: 3rem;
+    }
+
+    .show-title {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--text-color);
+      margin-bottom: 0.5rem;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+
+    .show-metadata {
+      color: var(--secondary-text);
+      font-size: 1rem;
+      margin-top: 0.5rem;
+    }
+    
+    /* SEASON DROP DOWN */
+    .season-selector {
+        background-color: #2b2b2b; /* Darker background */
+        color: var(--text-color);
+        padding: 0.75rem 1.25rem;
+        border: 1px solid #555;
+        border-radius: 8px;
+        font-size: 1.1rem;
+        cursor: pointer;
+        margin-bottom: 2rem;
+        width: 100%;
+        max-width: 350px;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 1em center;
+        background-size: 0.65em auto;
+    }
+    
+    /* EPISODE LIST/GRID */
+    .episode-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+    
+    .episode-card {
+        background-color: var(--card-bg);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
+        border: 1px solid var(--border-color);
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .episode-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.6);
+        border-color: var(--accent-color);
+    }
+    
+    .episode-template-img {
+        width: 120px; /* Larger thumbnail area */
+        height: 100%;
+        min-height: 140px;
+        background-color: #2b2b2b;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: var(--accent-color);
+        padding: 0.5rem;
+        text-align: center;
+        line-height: 1.2;
+        font-weight: 700;
+        background: linear-gradient(135deg, #2b2b2b 0%, #1a1a1a 100%);
+    }
+    
+    .episode-info {
+        padding: 1rem;
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    
+    .episode-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .episode-description {
+        font-size: 0.9rem;
+        color: var(--secondary-text);
+        margin-bottom: 1rem;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+    
+    .play-button {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+        align-self: flex-start;
+        margin-top: 0.5rem;
+        border-radius: 6px;
+    }
+    
+    /* UTILITY */
+    .hidden { display: none !important; }
+    .status-message {
+        padding: 0.75rem 2rem;
+        background-color: #000;
+        color: var(--secondary-text);
+        text-align: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+        border-top: 1px solid var(--border-color);
+    }
+    .loading-spinner {
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-top: 4px solid var(--accent-color);
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+        margin-right: 0.5rem;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .scan-status-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+    }
+
+  </style>
+</head>
+<body>
+  
+  <div class="header">
+    <div class="header-title">Media Catalog</div>
+    <button id="scan-button" class="scan-button">
+      <i class="fa-solid fa-folder-open"></i> Scan Library
+    </button>
+  </div>
+
+  <div class="content-area">
+    
+    <div id="sidebar" class="sidebar">
+        <div id="show-list-title" class="sidebar-title hidden">TV Shows</div>
+        <!-- Show list injected here -->
+    </div>
+    
+    <div id="detail-view" class="detail-view">
+        <div id="initial-state-message">
+            <h2 style="color:var(--accent-color);">Welcome!</h2>
+            <p style="font-size:1.1rem; color:var(--secondary-text);">Click "Scan Library" above to select your root media folder and populate your catalog.</p>
+        </div>
+        
+        <!-- Detailed content for selected show injected here -->
+    </div>
+
+  </div>
+  
+  <div id="status-container" class="status-message">
+      <div class="scan-status-container">
+          <!-- Status messages and spinner injected here -->
+      </div>
+  </div>
+
+  <script>
+    // --- APP STATE AND INITIALIZATION ---
+    let appState = {
+      shows: [],
+      selectedShowId: null,
+      selectedSeasonIndex: 0
+    };
+    
+    const elements = {
+      sidebar: document.getElementById('sidebar'),
+      detailView: document.getElementById('detail-view'),
+      scanButton: document.getElementById('scan-button'),
+      statusContainer: document.getElementById('status-container'),
+      initialMessage: document.getElementById('initial-state-message'),
+      showListTitle: document.getElementById('show-list-title')
+    };
+
+    // --- UTILITY FUNCTIONS ---
+    
+    function setStatus(message, isError = false, isLoading = false) {
+        let spinner = isLoading ? '<div class="loading-spinner"></div>' : '';
+        let color = isError ? 'red' : (isLoading ? 'var(--accent-color)' : 'var(--secondary-text)');
+        
+        elements.statusContainer.innerHTML = `
+            <div class="scan-status-container" style="color:${color};">
+                ${spinner} ${message}
+            </div>
+        `;
+        elements.scanButton.disabled = isLoading;
+    }
+
+    function setSelectedShow(showId) {
+        const show = appState.shows.find(s => s.id === showId);
+        if (!show) return;
+
+        appState.selectedShowId = showId;
+        appState.selectedSeasonIndex = 0; // Default to the first season
+        
+        // 1. Update sidebar selection class
+        document.querySelectorAll('.show-list-item').forEach(el => {
+            el.classList.remove('selected');
+        });
+        document.getElementById(`show-${showId}`).classList.add('selected');
+        
+        // 2. Render the detail view for the selected show
+        renderDetailView(show);
+    }
+    
+    function setSelectedSeason(seasonIndex) {
+        appState.selectedSeasonIndex = parseInt(seasonIndex, 10);
+        const show = appState.shows.find(s => s.id === appState.selectedShowId);
+        
+        if (show && show.seasons[appState.selectedSeasonIndex]) {
+            renderEpisodes(show.seasons[appState.selectedSeasonIndex]);
+        }
+    }
+
+    // --- RENDERING FUNCTIONS ---
+    
+    function renderShows() {
+        if (appState.shows.length === 0) {
+            elements.sidebar.innerHTML = '';
+            elements.showListTitle.classList.add('hidden');
+            return;
+        }
+
+        elements.initialMessage.classList.add('hidden');
+        elements.showListTitle.classList.remove('hidden');
+
+        let listHTML = '<div class="sidebar-title">TV Shows</div>';
+        
+        appState.shows.forEach(show => {
+            listHTML += `
+                <div class="show-list-item" id="show-${show.id}" data-id="${show.id}">
+                    ${show.title}
+                </div>
+            `;
+        });
+        
+        // Use an outer container to hold the title and list items for proper scrolling
+        const listContainer = document.createElement('div');
+        listContainer.innerHTML = listHTML;
+        elements.sidebar.innerHTML = ''; // Clear existing content
+        elements.sidebar.appendChild(listContainer);
+        
+        // Attach click listeners to the show list items
+        document.querySelectorAll('.show-list-item').forEach(el => {
+            el.addEventListener('click', (e) => {
+                setSelectedShow(e.currentTarget.dataset.id);
+            });
+        });
+
+        // Automatically select the first show or the previously selected one
+        const initialShowId = appState.selectedShowId || appState.shows[0].id;
+        setSelectedShow(initialShowId);
+    }
+    
+    function renderDetailView(show) {
+        let detailHTML = `
+            <div class="show-header">
+                <h1 class="show-title">${show.title}</h1>
+                <p class="show-metadata">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata" style="margin-top:0.25rem;">Root Path: ${show.rootPath}</p>
+            </div>
+            
+            <select id="season-select" class="season-selector">
+                ${show.seasons.map((season, index) => `
+                    <option value="${index}" ${index === appState.selectedSeasonIndex ? 'selected' : ''}>
+                        ${season.title} (${season.episodes.length} episodes)
+                    </option>
+                `).join('')}
+            </select>
+            
+            <div id="episode-list-container">
+                <!-- Episodes will be rendered here -->
+            </div>
+        `;
+        
+        elements.detailView.innerHTML = detailHTML;
+        
+        // Attach change listener to the season selector
+        const seasonSelect = document.getElementById('season-select');
+        if (seasonSelect) {
+            seasonSelect.addEventListener('change', (e) => {
+                setSelectedSeason(e.target.value);
+            });
+        }
+        
+        // Render episodes for the initially selected season
+        const initialSeason = show.seasons[appState.selectedSeasonIndex];
+        if (initialSeason) {
+            renderEpisodes(initialSeason);
+        } else {
+            document.getElementById('episode-list-container').innerHTML = '<p style="color:var(--secondary-text);">No episodes found in this season.</p>';
+        }
+    }
+    
+    function renderEpisodes(season) {
+        const container = document.getElementById('episode-list-container');
+        if (!container) return; // Guard clause if detail view hasn't been rendered yet
+
+        let episodeHTML = '<div class="episode-list">';
+        
+        season.episodes.forEach((episode, index) => {
+            // Calculate correct episode number based on the index + 1
+            const episodeNumber = index + 1; 
+            
+            // Extract the simple filename for the status message (assuming path.basename is available via preload)
+            const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
+                                   episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
+                                   episode.fullPath;
+
+            episodeHTML += `
+                <div class="episode-card">
+                    <div class="episode-template-img">S${appState.selectedSeasonIndex + 1} E${episodeNumber}</div>
+                    <div class="episode-info">
+                        <div>
+                            <div class="episode-title">${episode.title}</div>
+                            <div class="episode-description">Template description: A placeholder description for the episode plot and details.</div>
+                        </div>
+                        <button class="play-button" data-path="${episode.fullPath}">
+                            <i class="fa-solid fa-play"></i> Play
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        episodeHTML += '</div>';
+        container.innerHTML = episodeHTML;
+        
+        // Attach click listeners to all Play buttons
+        document.querySelectorAll('.play-button').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const filePath = e.currentTarget.dataset.path;
+                
+                // Extract filename for better status message
+                const episodeFileName = filePath.substring(filePath.lastIndexOf('/') + 1) || 
+                                       filePath.substring(filePath.lastIndexOf('\\') + 1) || 
+                                       filePath;
+                
+                setStatus(`Launching ${episodeFileName}...`, false, true);
+                
+                // Call launchExternal
+                const response = await window.api.launchExternal(filePath);
+                
+                if (response.success) {
+                    setStatus('Launched successfully in external player.', false, false);
+                } else {
+                    // path.basename is not defined in the renderer context, using a simple string slice workaround
+                    setStatus(`Launch failed for ${episodeFileName}: ${response.error}`, true, false);
+                }
+            });
+        });
+    }
+
+    // --- MAIN EVENT HANDLERS ---
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initial load of cached data (in dummy mode, this will return an empty array)
+        window.api.fetchLibraryCache().then(response => {
+            if (response.shows && response.shows.length > 0) {
+                appState.shows = response.shows;
+                setStatus(response.message);
+                renderShows();
+            } else {
+                setStatus('Ready to scan. No local cache found.', false, false);
+            }
+        });
+
+        // Scan Button Handler
+        elements.scanButton.addEventListener('click', async () => {
+            setStatus('Opening directory selector...', false, true);
+            
+            // 1. Get the root path
+            const rootPath = await window.api.openDirectoryDialog();
+
+            if (!rootPath) {
+                setStatus('Scan canceled by user.', false, false);
+                return;
+            }
+            
+            setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
+            
+            // 2. Call the main process to scan and cache
+            const response = await window.api.scanAndCacheLibrary(rootPath);
+            
+            if (response.success) {
+                appState.shows = response.shows;
+                setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
+                renderShows(); // RENDER THE DATA
+            } else {
+                setStatus(`Scan Error: ${response.message}`, true, false);
+            }
+        });
+    });
+  </script>
+</body>
+</html>
