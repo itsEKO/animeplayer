@@ -3,258 +3,40 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Media Library</title>
+  <title>OtakuDex</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
   <style>
-    /* VARIABLES */
+    /* CRITICAL FIX: Ensure the absolute root HTML and Body elements are dark */
+    html, body {
+        background-color: #0d0d0d; /* Matching the dark-bg custom color */
+    }
+
+    /* Custom configuration for Tailwind colors and font */
     :root {
-      --bg-color: #0d0d0d; /* Deeper background */
-      --card-bg: #1a1a1a;
-      --text-color: #ffffff; /* Pure white text */
-      --accent-color: #a855f7; /* Changed to Vibrant Purple */
+      --accent-color: #a855f7; /* Purple-500 */
       --secondary-text: #b3b3b3;
-      --border-color: #333333;
-    }
-
-    /* GLOBAL STYLES */
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* HEADER/TOOLBAR */
-    .header {
-      padding: 1rem 2rem;
-      background-color: #000;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-      border-bottom: 1px solid var(--accent-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-shrink: 0;
-      z-index: 10;
-    }
-
-    .header-title {
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: var(--accent-color);
-      letter-spacing: 1.5px;
-    }
-
-    /* CONTROLS */
-    .scan-button, .play-button {
-      background-color: var(--accent-color);
-      color: var(--text-color);
-      border: none;
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px; /* Slightly more rounded */
-      font-weight: 600;
-      cursor: pointer;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
-      transition: background-color 0.2s, transform 0.1s;
-    }
-
-    .scan-button:hover, .play-button:hover {
-      background-color: #c084fc; /* Brighter purple on hover */
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.6);
     }
     
-    .scan-button:disabled {
-      background-color: var(--border-color);
-      color: var(--secondary-text);
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
+    /* Tailwind Configuration */
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'dark-bg': '#0d0d0d', /* Primary Dark background */
+            'card-dark': '#1a1a1a', /* Sidebar and List Card background */
+            'modal-bg': '#262626', /* NEW: Slightly lighter background for the modal content */
+            'border-dark': '#333333', /* Border color */
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
     }
 
-    /* MAIN CONTENT AREA */
-    .content-area {
-      flex-grow: 1;
-      display: flex;
-      overflow: hidden;
-    }
-
-    /* SIDEBAR (SHOWS LIST) */
-    .sidebar {
-      width: 280px; /* Wider sidebar */
-      background-color: var(--card-bg);
-      padding: 1rem 0;
-      overflow-y: auto;
-      border-right: 1px solid var(--border-color);
-      flex-shrink: 0;
-      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.3);
-    }
-
-    .show-list-item {
-      padding: 0.75rem 1.5rem;
-      cursor: pointer;
-      font-weight: 500;
-      font-size: 1rem;
-      border-left: 4px solid transparent;
-      transition: background-color 0.15s, border-left-color 0.15s;
-    }
-
-    .show-list-item:hover {
-      background-color: #2b2b2b;
-    }
-
-    .show-list-item.selected {
-      background-color: #2b2b2b; /* Darker than background, but selected */
-      border-left-color: var(--accent-color);
-      font-weight: 700;
-    }
-    
-    .sidebar-title {
-        padding: 0 1.5rem 0.75rem;
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: var(--secondary-text);
-        border-bottom: 1px solid var(--border-color);
-        margin-bottom: 1rem;
-    }
-
-    /* DETAIL VIEW (SEASONS/EPISODES) */
-    .detail-view {
-      flex-grow: 1;
-      padding: 3rem; /* More padding */
-      overflow-y: auto;
-    }
-
-    .show-header {
-      margin-bottom: 3rem;
-    }
-
-    .show-title {
-      font-size: 3rem;
-      font-weight: 800;
-      color: var(--text-color);
-      margin-bottom: 0.5rem;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-    }
-
-    .show-metadata {
-      color: var(--secondary-text);
-      font-size: 1rem;
-      margin-top: 0.5rem;
-    }
-    
-    /* SEASON DROP DOWN */
-    .season-selector {
-        background-color: #2b2b2b; /* Darker background */
-        color: var(--text-color);
-        padding: 0.75rem 1.25rem;
-        border: 1px solid #555;
-        border-radius: 8px;
-        font-size: 1.1rem;
-        cursor: pointer;
-        margin-bottom: 2rem;
-        width: 100%;
-        max-width: 350px;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right 1em center;
-        background-size: 0.65em auto;
-    }
-    
-    /* EPISODE LIST/GRID */
-    .episode-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-        gap: 1.5rem;
-    }
-    
-    .episode-card {
-        background-color: var(--card-bg);
-        border-radius: 12px;
-        overflow: hidden;
-        display: flex;
-        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-        border: 1px solid var(--border-color);
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .episode-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.6);
-        border-color: var(--accent-color);
-    }
-    
-    .episode-template-img {
-        width: 120px; /* Larger thumbnail area */
-        height: 100%;
-        min-height: 140px;
-        background-color: #2b2b2b;
-        flex-shrink: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        color: var(--accent-color);
-        padding: 0.5rem;
-        text-align: center;
-        line-height: 1.2;
-        font-weight: 700;
-        background: linear-gradient(135deg, #2b2b2b 0%, #1a1a1a 100%);
-    }
-    
-    .episode-info {
-        padding: 1rem;
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-    
-    .episode-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-
-    .episode-description {
-        font-size: 0.9rem;
-        color: var(--secondary-text);
-        margin-bottom: 1rem;
-        line-height: 1.4;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-    }
-    
-    .play-button {
-        padding: 0.6rem 1.2rem;
-        font-size: 0.9rem;
-        align-self: flex-start;
-        margin-top: 0.5rem;
-        border-radius: 6px;
-    }
-    
-    /* UTILITY */
-    .hidden { display: none !important; }
-    .status-message {
-        padding: 0.75rem 2rem;
-        background-color: #000;
-        color: var(--secondary-text);
-        text-align: center;
-        font-size: 1rem;
-        flex-shrink: 0;
-        border-top: 1px solid var(--border-color);
-    }
+    /* CUSTOM CSS FOR ANIMATIONS (Tailwind doesn't cover @keyframes) */
     .loading-spinner {
         border: 4px solid rgba(255, 255, 255, 0.1);
         border-top: 4px solid var(--accent-color);
@@ -270,35 +52,47 @@
         100% { transform: rotate(360deg); }
     }
     
-    .scan-status-container {
+    /* Utility class for image placeholder in episode card */
+    .episode-template-img {
+        width: 80px; 
+        height: 100%;
+        min-width: 80px;
         display: flex;
-        align-items: center;
         justify-content: center;
-        min-height: 40px;
+        align-items: center;
+        text-align: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        background-color: #2b2b2b; /* Darker background for image area */
+        color: var(--secondary-text);
+        padding: 0.5rem;
     }
-
   </style>
 </head>
-<body>
+<!-- The body also explicitly uses the dark-bg class -->
+<body class="font-sans bg-dark-bg text-white flex flex-col h-screen overflow-hidden">
   
-  <div class="header">
-    <div class="header-title">Media Catalog</div>
-    <button id="scan-button" class="scan-button">
-      <i class="fa-solid fa-folder-open"></i> Scan Library
+  <!-- Header/Toolbar -->
+  <header class="header p-4 bg-black shadow-2xl border-b border-purple-600 flex justify-between items-center flex-shrink-0 z-10">
+    <div class="header-title text-2xl font-extrabold text-purple-500 tracking-wider">OtakuDex</div>
+    <button id="settings-button" class="action-button bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg font-semibold cursor-pointer shadow-lg transition duration-200 flex items-center gap-2">
+      <i class="fa-solid fa-gear text-xl"></i> Settings
     </button>
-  </div>
+  </header>
 
-  <div class="content-area">
+  <div class="content-area flex-grow flex overflow-hidden">
     
-    <div id="sidebar" class="sidebar">
-        <div id="show-list-title" class="sidebar-title hidden">TV Shows</div>
+    <!-- Sidebar -->
+    <div id="sidebar" class="sidebar w-72 bg-card-dark p-0 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg">
+        <div id="show-list-title" class="sidebar-title px-6 pt-4 pb-3 text-lg font-bold text-gray-400 border-b border-border-dark mb-4 hidden">TV Shows</div>
         <!-- Show list injected here -->
     </div>
     
-    <div id="detail-view" class="detail-view">
+    <!-- Detail View - ENSURED it uses the dark-bg class -->
+    <div id="detail-view" class="detail-view flex-grow p-10 overflow-y-auto bg-dark-bg">
         <div id="initial-state-message">
-            <h2 style="color:var(--accent-color);">Welcome!</h2>
-            <p style="font-size:1.1rem; color:var(--secondary-text);">Click "Scan Library" above to select your root media folder and populate your catalog.</p>
+            <h2 class="text-purple-500 text-3xl font-bold mb-4">Welcome to OtakuDex!</h2>
+            <p class="text-xl text-gray-400">Open **Settings** (gear icon) to scan your library and begin cataloging your media.</p>
         </div>
         
         <!-- Detailed content for selected show injected here -->
@@ -306,27 +100,155 @@
 
   </div>
   
-  <div id="status-container" class="status-message">
-      <div class="scan-status-container">
+  <!-- Status Bar -->
+  <div id="status-container" class="status-message p-3 bg-black text-gray-400 text-center text-sm flex-shrink-0 border-t border-border-dark">
+      <div class="scan-status-container flex items-center justify-center min-h-[40px]">
           <!-- Status messages and spinner injected here -->
       </div>
   </div>
 
+  <!-- SETTINGS MODAL -->
+  <div id="settings-modal" 
+       class="modal-overlay hidden fixed inset-0 bg-black bg-opacity-80 z-[1000] flex justify-center items-center opacity-0 transition-opacity duration-300">
+    <!-- Updated class to use bg-modal-bg and a stronger shadow -->
+    <div class="modal-content bg-modal-bg rounded-xl w-11/12 max-w-3xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl shadow-purple-900/50 transform scale-90 transition-transform duration-300">
+        <div class="modal-header flex justify-between items-center border-b-2 border-border-dark pb-4 mb-6">
+            <h2 class="m-0 text-purple-500 text-2xl font-bold">Application Settings</h2>
+            <button id="close-settings-button" class="text-gray-400 hover:text-white text-4xl cursor-pointer p-2 leading-none">&times;</button>
+        </div>
+        
+        <div class="settings-section mb-8 pt-4 border-t border-border-dark first:border-t-0 first:pt-0">
+            <h3 class="text-xl text-white font-semibold mb-3">Library Management</h3>
+            <p class="text-gray-400 text-sm mb-4">Use this option to select the root folder containing your media files. Scanning may take time.</p>
+            <div class="flex items-center gap-4">
+                <button id="settings-scan-button" class="action-button bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg font-semibold cursor-pointer shadow-md transition duration-200 flex items-center gap-2">
+                    <i class="fa-solid fa-folder-open"></i> Scan Library
+                </button>
+            </div>
+        </div>
+        
+        <div class="settings-section mb-8 pt-4 border-t border-border-dark">
+            <h3 class="text-xl text-white font-semibold mb-3">Metadata Configuration (WIP)</h3>
+            <p class="text-gray-400 text-sm mb-4">Select your preferred sources for retrieving show titles, descriptions, and episode information. </p>
+
+            <!-- Primary Provider -->
+            <label class="setting-label block font-semibold mt-4 mb-2 text-gray-400">Primary Metadata Provider:</label>
+            <div id="primary-provider-group" class="provider-group flex gap-4 flex-wrap">
+                <!-- Radio buttons injected by JS -->
+            </div>
+
+            <!-- Secondary/Backup Provider -->
+            <label class="setting-label block font-semibold mt-4 mb-2 text-gray-400">Backup Metadata Provider:</label>
+            <p class="text-xs text-gray-500 mb-2">Used if the primary provider fails to find a match or is unreachable.</p>
+            <div id="secondary-provider-group" class="provider-group flex gap-4 flex-wrap">
+                <!-- Radio buttons injected by JS -->
+            </div>
+        </div>
+    </div>
+  </div>
+
   <script>
+    // --- MOCK IPC BRIDGE FOR WEB ENVIRONMENT (Fix for window.api is undefined) ---
+    // This section simulates the native functions (like file picking and scanning) 
+    // that would normally be provided by an Electron preload script.
+    if (typeof window.api === 'undefined') {
+        const mockShows = [
+            {
+                id: 'show-a',
+                title: 'Mock Anime Title A',
+                rootPath: '/Users/mock/Anime/Mock_Anime_Title_A',
+                seasons: [
+                    {
+                        title: 'Season 1',
+                        episodes: [
+                            { fullPath: '/Users/mock/Anime/A/S1E1.mkv' },
+                            { fullPath: '/Users/mock/Anime/A/S1E2.mkv' },
+                            { fullPath: '/Users/mock/Anime/A/S1E3.mkv' },
+                        ]
+                    },
+                    {
+                        title: 'OVA/Extras',
+                        episodes: [
+                            { fullPath: '/Users/mock/Anime/A/OVA1.mkv' },
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'show-b',
+                title: 'Cool Manga Adaptation B',
+                rootPath: '/Users/mock/Anime/Cool_Manga_Adaptation_B',
+                seasons: [
+                    {
+                        title: 'Season 1',
+                        episodes: [
+                            { fullPath: '/Users/mock/Anime/B/S1E1.mp4' },
+                            { fullPath: '/Users/mock/Anime/B/S1E2.mp4' },
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        window.api = {
+            // Mock: Returns cached data immediately 
+            fetchLibraryCache: () => Promise.resolve({
+                success: true,
+                message: "Loaded mock data from cache.",
+                shows: mockShows
+            }),
+
+            // Mock: Simulates opening a directory and selecting a path
+            openDirectoryDialog: () => Promise.resolve('/Users/mock/New_Scan_Folder'),
+
+            // Mock: Simulates scanning the library (takes a moment)
+            scanAndCacheLibrary: (rootPath) => new Promise(resolve => {
+                console.log(`[MOCK IPC] Simulating scan of: ${rootPath}`);
+                setTimeout(() => {
+                    resolve({
+                        success: true,
+                        message: "Mock scan completed successfully.",
+                        shows: mockShows
+                    });
+                }, 1500); // Simulate network/disk delay
+            }),
+            
+            // Mock: Simulates launching an external media player
+            launchExternal: (filePath) => {
+                console.log(`[MOCK IPC] Simulating external launch of: ${filePath}`);
+                return Promise.resolve({ success: true });
+            }
+        };
+        console.warn('MOCK IPC BRIDGE INITIALIZED: window.api is now simulated for development in the browser.');
+    }
+    // --- END MOCK IPC BRIDGE ---
+
     // --- APP STATE AND INITIALIZATION ---
     let appState = {
       shows: [],
       selectedShowId: null,
-      selectedSeasonIndex: 0
+      selectedSeasonIndex: 0,
+      
+      // New State for Settings
+      metadataProviders: ['AniList', 'AniDB', 'TheTVDB'],
+      primaryProvider: 'AniList',
+      secondaryProvider: 'TheTVDB'
     };
     
     const elements = {
       sidebar: document.getElementById('sidebar'),
       detailView: document.getElementById('detail-view'),
-      scanButton: document.getElementById('scan-button'),
       statusContainer: document.getElementById('status-container'),
       initialMessage: document.getElementById('initial-state-message'),
-      showListTitle: document.getElementById('show-list-title')
+      showListTitle: document.getElementById('show-list-title'),
+
+      // Settings elements
+      settingsButton: document.getElementById('settings-button'),
+      settingsModal: document.getElementById('settings-modal'),
+      closeSettingsButton: document.getElementById('close-settings-button'),
+      settingsScanButton: document.getElementById('settings-scan-button'),
+      primaryProviderGroup: document.getElementById('primary-provider-group'),
+      secondaryProviderGroup: document.getElementById('secondary-provider-group'),
     };
 
     // --- UTILITY FUNCTIONS ---
@@ -336,11 +258,103 @@
         let color = isError ? 'red' : (isLoading ? 'var(--accent-color)' : 'var(--secondary-text)');
         
         elements.statusContainer.innerHTML = `
-            <div class="scan-status-container" style="color:${color};">
+            <div class="scan-status-container flex items-center justify-center min-h-[40px]" style="color:${color};">
                 ${spinner} ${message}
             </div>
         `;
-        elements.scanButton.disabled = isLoading;
+        // Only disable the scan button when scanning is active
+        elements.settingsScanButton.disabled = isLoading;
+    }
+
+    // UPDATED: Logic to manage Tailwind classes for fade-in/fade-out
+    function toggleSettingsModal(show) {
+        const modal = elements.settingsModal;
+        if (show === true) {
+            // 1. Make it visible (display: block)
+            modal.classList.remove('hidden');
+            
+            // 2. Trigger the opacity and scale transition after the browser registers display: block
+            setTimeout(() => {
+                modal.classList.remove('opacity-0', 'scale-90');
+                modal.classList.add('opacity-100', 'scale-100');
+            }, 10);
+            
+            renderMetadataProviders(); 
+        } else {
+            // 1. Start the fade-out transition
+            modal.classList.remove('opacity-100', 'scale-100');
+            modal.classList.add('opacity-0', 'scale-90');
+            
+            // 2. Hide completely with display: none after the 300ms transition finishes
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300); 
+        }
+    }
+    
+    function updateProviderState(type, value) {
+        if (type === 'primary') {
+            appState.primaryProvider = value;
+        } else if (type === 'secondary') {
+            appState.secondaryProvider = value;
+        }
+        
+        // Ensure primary and secondary providers are not the same
+        if (appState.primaryProvider === appState.secondaryProvider) {
+            // Find the next available provider that isn't the newly selected one
+            const nextProvider = appState.metadataProviders.find(p => p !== value);
+            
+            if (nextProvider) {
+                // If collision, force the *other* provider to the next available one
+                if (type === 'primary') {
+                    appState.secondaryProvider = nextProvider;
+                } else if (type === 'secondary') {
+                    appState.primaryProvider = nextProvider;
+                }
+            }
+            // Re-render to reflect correction
+            renderMetadataProviders(); 
+        }
+
+        console.log(`Provider updated. Primary: ${appState.primaryProvider}, Secondary: ${appState.secondaryProvider}`);
+        setStatus(`Settings updated. Primary metadata provider set to ${appState.primaryProvider}.`, false, false);
+    }
+    
+    function renderProviderOptions(type) {
+        const currentSelection = (type === 'primary') ? appState.primaryProvider : appState.secondaryProvider;
+        const group = (type === 'primary') ? elements.primaryProviderGroup : elements.secondaryProviderGroup;
+        const name = (type === 'primary') ? 'primary-provider' : 'secondary-provider';
+        
+        let html = '';
+        appState.metadataProviders.forEach(provider => {
+            const isSelected = provider === currentSelection;
+
+            html += `
+                <label class="provider-option flex items-center gap-2 p-2 border border-border-dark rounded-md cursor-pointer transition duration-150 hover:bg-gray-800">
+                    <input type="radio" 
+                           name="${name}" 
+                           value="${provider}" 
+                           data-type="${type}" 
+                           class="text-purple-500 focus:ring-purple-500"
+                           ${isSelected ? 'checked' : ''}>
+                    <span class="${isSelected ? 'text-purple-400 font-bold' : 'text-gray-300'}">${provider}</span>
+                </label>
+            `;
+        });
+        
+        group.innerHTML = html;
+        
+        // Attach event listeners
+        group.querySelectorAll('input[type="radio"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                updateProviderState(e.target.dataset.type, e.target.value);
+            });
+        });
+    }
+
+    function renderMetadataProviders() {
+        renderProviderOptions('primary');
+        renderProviderOptions('secondary');
     }
 
     function setSelectedShow(showId) {
@@ -350,11 +364,15 @@
         appState.selectedShowId = showId;
         appState.selectedSeasonIndex = 0; // Default to the first season
         
-        // 1. Update sidebar selection class
+        // 1. Update sidebar selection class (Tailwind classes)
         document.querySelectorAll('.show-list-item').forEach(el => {
-            el.classList.remove('selected');
+            el.classList.remove('bg-gray-800', 'border-purple-500', 'font-bold');
+            el.classList.add('hover:bg-gray-800/50');
         });
-        document.getElementById(`show-${showId}`).classList.add('selected');
+        const selectedEl = document.getElementById(`show-${showId}`);
+        selectedEl.classList.add('bg-gray-800', 'border-purple-500', 'font-bold');
+        selectedEl.classList.remove('hover:bg-gray-800/50');
+
         
         // 2. Render the detail view for the selected show
         renderDetailView(show);
@@ -381,43 +399,41 @@
         elements.initialMessage.classList.add('hidden');
         elements.showListTitle.classList.remove('hidden');
 
-        let listHTML = '<div class="sidebar-title">TV Shows</div>';
+        let listHTML = elements.showListTitle.outerHTML; // Preserve the title element structure
         
         appState.shows.forEach(show => {
+            // Tailwind classes applied for styling and hover effects
             listHTML += `
-                <div class="show-list-item" id="show-${show.id}" data-id="${show.id}">
+                <div class="show-list-item px-6 py-3 cursor-pointer text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800/50" id="show-${show.id}" data-id="${show.id}">
                     ${show.title}
                 </div>
             `;
         });
         
-        // Use an outer container to hold the title and list items for proper scrolling
         const listContainer = document.createElement('div');
         listContainer.innerHTML = listHTML;
-        elements.sidebar.innerHTML = ''; // Clear existing content
+        elements.sidebar.innerHTML = ''; 
         elements.sidebar.appendChild(listContainer);
         
-        // Attach click listeners to the show list items
         document.querySelectorAll('.show-list-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 setSelectedShow(e.currentTarget.dataset.id);
             });
         });
 
-        // Automatically select the first show or the previously selected one
         const initialShowId = appState.selectedShowId || appState.shows[0].id;
         setSelectedShow(initialShowId);
     }
     
     function renderDetailView(show) {
         let detailHTML = `
-            <div class="show-header">
-                <h1 class="show-title">${show.title}</h1>
-                <p class="show-metadata">Template Metadata: Seasons found: ${show.seasons.length}</p>
-                <p class="show-metadata" style="margin-top:0.25rem;">Root Path: ${show.rootPath}</p>
+            <div class="show-header mb-8">
+                <h1 class="text-5xl font-extrabold text-white mb-2">${show.title}</h1>
+                <p class="text-gray-400 text-lg">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="text-gray-500 text-sm mt-1">Root Path: ${show.rootPath}</p>
             </div>
             
-            <select id="season-select" class="season-selector">
+            <select id="season-select" class="season-selector mb-8 p-2 bg-gray-700 border border-border-dark rounded-lg text-white appearance-none cursor-pointer">
                 ${show.seasons.map((season, index) => `
                     <option value="${index}" ${index === appState.selectedSeasonIndex ? 'selected' : ''}>
                         ${season.title} (${season.episodes.length} episodes)
@@ -432,7 +448,6 @@
         
         elements.detailView.innerHTML = detailHTML;
         
-        // Attach change listener to the season selector
         const seasonSelect = document.getElementById('season-select');
         if (seasonSelect) {
             seasonSelect.addEventListener('change', (e) => {
@@ -440,40 +455,37 @@
             });
         }
         
-        // Render episodes for the initially selected season
         const initialSeason = show.seasons[appState.selectedSeasonIndex];
         if (initialSeason) {
             renderEpisodes(initialSeason);
         } else {
-            document.getElementById('episode-list-container').innerHTML = '<p style="color:var(--secondary-text);">No episodes found in this season.</p>';
+            document.getElementById('episode-list-container').innerHTML = '<p class="text-gray-400">No episodes found in this season.</p>';
         }
     }
     
     function renderEpisodes(season) {
         const container = document.getElementById('episode-list-container');
-        if (!container) return; // Guard clause if detail view hasn't been rendered yet
+        if (!container) return; 
 
-        let episodeHTML = '<div class="episode-list">';
+        let episodeHTML = '<div class="episode-list grid gap-6">';
         
         season.episodes.forEach((episode, index) => {
-            // Calculate correct episode number based on the index + 1
             const episodeNumber = index + 1; 
-            
-            // Extract the simple filename for the status message (assuming path.basename is available via preload)
             const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
                                    episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
                                    episode.fullPath;
 
+            // Tailwind classes for the episode card structure and appearance
             episodeHTML += `
-                <div class="episode-card">
+                <div class="episode-card bg-card-dark rounded-xl overflow-hidden flex shadow-xl border border-border-dark transform transition duration-200 hover:scale-[1.01] hover:shadow-purple-500/30">
                     <div class="episode-template-img">S${appState.selectedSeasonIndex + 1} E${episodeNumber}</div>
-                    <div class="episode-info">
+                    <div class="episode-info p-4 flex flex-col justify-between flex-grow">
                         <div>
-                            <div class="episode-title">${episode.title}</div>
-                            <div class="episode-description">Template description: A placeholder description for the episode plot and details.</div>
+                            <div class="episode-title text-lg font-semibold text-white truncate">${episodeFileName}</div>
+                            <div class="episode-description text-gray-400 text-sm mt-1">Template description: A placeholder description for the episode plot and details.</div>
                         </div>
-                        <button class="play-button" data-path="${episode.fullPath}">
-                            <i class="fa-solid fa-play"></i> Play
+                        <button class="action-button bg-purple-600 hover:bg-purple-500 text-white py-1 px-3 rounded-md text-sm font-medium mt-3 self-start transition duration-150 flex items-center gap-1" data-path="${episode.fullPath}">
+                            <i class="fa-solid fa-play text-xs"></i> Play
                         </button>
                     </div>
                 </div>
@@ -483,25 +495,20 @@
         episodeHTML += '</div>';
         container.innerHTML = episodeHTML;
         
-        // Attach click listeners to all Play buttons
-        document.querySelectorAll('.play-button').forEach(button => {
+        document.querySelectorAll('.episode-card .action-button').forEach(button => {
             button.addEventListener('click', async (e) => {
                 const filePath = e.currentTarget.dataset.path;
-                
-                // Extract filename for better status message
                 const episodeFileName = filePath.substring(filePath.lastIndexOf('/') + 1) || 
                                        filePath.substring(filePath.lastIndexOf('\\') + 1) || 
                                        filePath;
                 
                 setStatus(`Launching ${episodeFileName}...`, false, true);
                 
-                // Call launchExternal
                 const response = await window.api.launchExternal(filePath);
                 
                 if (response.success) {
                     setStatus('Launched successfully in external player.', false, false);
                 } else {
-                    // path.basename is not defined in the renderer context, using a simple string slice workaround
                     setStatus(`Launch failed for ${episodeFileName}: ${response.error}`, true, false);
                 }
             });
@@ -511,40 +518,66 @@
     // --- MAIN EVENT HANDLERS ---
     
     document.addEventListener('DOMContentLoaded', () => {
-        // Initial load of cached data (in dummy mode, this will return an empty array)
+        // Event listeners for Settings Modal
+        elements.settingsButton.addEventListener('click', () => toggleSettingsModal(true));
+        elements.closeSettingsButton.addEventListener('click', () => toggleSettingsModal(false));
+        // Allow clicking outside the modal content to close it
+        elements.settingsModal.addEventListener('click', (e) => {
+            if (e.target.id === 'settings-modal') {
+                toggleSettingsModal(false);
+            }
+        });
+        
+        // Initial load of cached data
         window.api.fetchLibraryCache().then(response => {
             if (response.shows && response.shows.length > 0) {
                 appState.shows = response.shows;
                 setStatus(response.message);
                 renderShows();
             } else {
-                setStatus('Ready to scan. No local cache found.', false, false);
+                setStatus('Ready to scan. Open Settings to begin.', false, false);
             }
         });
 
-        // Scan Button Handler
-        elements.scanButton.addEventListener('click', async () => {
-            setStatus('Opening directory selector...', false, true);
-            
-            // 1. Get the root path
-            const rootPath = await window.api.openDirectoryDialog();
+        // Scan Button Handler (Now inside Settings)
+        elements.settingsScanButton.addEventListener('click', async () => {
+            console.log('SCAN BUTTON CLICKED. Starting library scan...');
 
-            if (!rootPath) {
-                setStatus('Scan canceled by user.', false, false);
+            // The mock check is now done at the top of the script, but we keep this log for user clarity
+            if (typeof window.api === 'undefined' || typeof window.api.openDirectoryDialog !== 'function') {
+                setStatus('Error: IPC Bridge not found (Check preload script and main.js config).', true, false);
+                console.error('window.api or openDirectoryDialog is UNDEFINED. Preload script is likely missing or misconfigured.');
                 return;
             }
+
+            setStatus('Opening directory selector...', false, true);
             
-            setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
-            
-            // 2. Call the main process to scan and cache
-            const response = await window.api.scanAndCacheLibrary(rootPath);
-            
-            if (response.success) {
-                appState.shows = response.shows;
-                setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
-                renderShows(); // RENDER THE DATA
-            } else {
-                setStatus(`Scan Error: ${response.message}`, true, false);
+            try {
+                // 1. Get the root path
+                const rootPath = await window.api.openDirectoryDialog();
+
+                if (!rootPath) {
+                    setStatus('Scan canceled by user.', false, false);
+                    return;
+                }
+                
+                // Close settings modal immediately before starting the long scan operation
+                toggleSettingsModal(false);
+                setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
+                
+                // 2. Call the main process to scan and cache
+                const response = await window.api.scanAndCacheLibrary(rootPath);
+                
+                if (response.success) {
+                    appState.shows = response.shows;
+                    setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
+                    renderShows(); // RENDER THE DATA
+                } else {
+                    setStatus(`Scan Error: ${response.message}`, true, false);
+                }
+            } catch (error) {
+                console.error("IPC Call Failed during Scan:", error);
+                setStatus(`Fatal IPC Error: ${error.message}. See console.`, true, false);
             }
         });
     });
