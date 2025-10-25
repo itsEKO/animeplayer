@@ -3,83 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-  <title>OtakuDex</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <style>
-    /* CRITICAL FIX: Ensure the absolute root HTML and Body elements are dark */
-    html, body {
-        background-color: #0d0d0d; /* Matching the dark-bg custom color */
-    }
-
-    /* Custom configuration for Tailwind colors and font */
-    :root {
-      --accent-color: #a855f7; /* Purple-500 */
-      --secondary-text: #b3b3b3;
-    }
-    
-    /* Tailwind Configuration */
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            'dark-bg': '#0d0d0d', /* Primary Dark background */
-            'card-dark': '#1a1a1a', /* Sidebar and List Card background */
-            'modal-bg': '#262626', /* NEW: Slightly lighter background for the modal content */
-            'border-dark': '#333333', /* Border color */
-          },
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-          }
-        }
-      }
-    }
-
-    /* CUSTOM CSS FOR ANIMATIONS (Tailwind doesn't cover @keyframes) */
-    .loading-spinner {
-        border: 4px solid rgba(255, 255, 255, 0.1);
-        border-top: 4px solid var(--accent-color);
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        animation: spin 1s linear infinite;
-        margin-right: 0.5rem;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-    
-    /* Utility class for image placeholder in episode card */
-    .episode-template-img {
-        width: 80px; 
-        height: 100%;
-        min-width: 80px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-        font-size: 0.8rem;
-        font-weight: 700;
-        background-color: #2b2b2b; /* Darker background for image area */
-        color: var(--secondary-text);
-        padding: 0.5rem;
-    }
-  </style>
-</head>
-<!-- The body also explicitly uses the dark-bg class -->
-<body class="font-sans bg-dark-bg text-white flex flex-col h-screen overflow-hidden">
-  
-  <!-- Header/Toolbar -->
-  <header class="header p-4 bg-black shadow-2xl border-b border-purple-600 flex justify-between items-center flex-shrink-0 z-10">
-    <div class="header-title text-2xl font-extrabold text-purple-500 tracking-wider">OtakuDex</div>
-    <button id="settings-button" class="action-button bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg font-semibold cursor-pointer shadow-lg transition duration-200 flex items-center gap-2">
-      <i class="fa-solid fa-gear text-xl"></i> Settings
-=======
   <title>Media Library</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -90,15 +13,10 @@
       theme: {
         extend: {
           colors: {
-            // Equivalent to the previous --accent-color: #a855f7;
             'accent-purple': '#a855f7', 
-            // Equivalent to the previous --bg-color: #0d0d0d;
             'bg-deep': '#0d0d0d', 
-            // Equivalent to the previous --card-bg: #1a1a1a;
             'bg-card': '#1a1a1a', 
-            // Equivalent to the previous --secondary-text: #b3b3b3;
             'text-secondary': '#b3b3b3', 
-            // Equivalent to the previous --border-color: #333333;
             'border-dark': '#333333', 
           },
         }
@@ -108,307 +26,140 @@
   
   <style>
     /* Custom styles for specific elements not easily handled by utility classes */
-    body {
-      /* Hide scrollbar for a cleaner look */
-      scrollbar-width: none; /* Firefox */
-    }
-    body::-webkit-scrollbar {
-      display: none; /* Chrome, Safari, Opera */
-    }
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none; /* IE and Edge */
-      scrollbar-width: none; /* Firefox */
-    }
+    body::-webkit-scrollbar, .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* Custom background for the dropdown arrow, matching the previous SVG setup */
+    /* Custom background for the dropdown arrow */
     .custom-select-bg {
         background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
         background-repeat: no-repeat;
         background-position: right 1rem center;
         background-size: 0.65em auto;
     }
+
+    /* Gradient overlay for banner image to ensure text readability */
+    .banner-overlay {
+        background: linear-gradient(to top, rgba(13, 13, 13, 0.95), rgba(13, 13, 13, 0.5), transparent);
+    }
   </style>
 </head>
 <body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
   
-  <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-10 border-b border-accent-purple">
+  <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-20 border-b border-accent-purple">
     <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">Media Catalog</div>
-    <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-      <i class="fa-solid fa-folder-open"></i> Scan Library
->>>>>>> Stashed changes
-    </button>
-  </header>
+    <div class="flex items-center space-x-4">
+        <button id="scan-button" class="scan-button bg-accent-purple text-white px-4 py-2 lg:px-6 lg:py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed">
+          <i class="fa-solid fa-folder-open"></i> Scan Library
+        </button>
+        <button id="settings-button" class="text-white text-2xl p-2 rounded-full hover:bg-gray-800 transition duration-150">
+            <i class="fa-solid fa-cog"></i>
+        </button>
+    </div>
+  </div>
 
   <div class="content-area flex-grow flex overflow-hidden">
     
-<<<<<<< Updated upstream
-    <!-- Sidebar -->
-    <div id="sidebar" class="sidebar w-72 bg-card-dark p-0 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg">
-        <div id="show-list-title" class="sidebar-title px-6 pt-4 pb-3 text-lg font-bold text-gray-400 border-b border-border-dark mb-4 hidden">TV Shows</div>
-        <!-- Show list injected here -->
+    <div id="sidebar" class="sidebar w-72 bg-bg-card overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
+        <div id="show-list-title" class="sidebar-title px-6 pt-4 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
+        <div id="show-list-container">
+            </div>
     </div>
     
-    <!-- Detail View - ENSURED it uses the dark-bg class -->
-    <div id="detail-view" class="detail-view flex-grow p-10 overflow-y-auto bg-dark-bg">
-        <div id="initial-state-message">
-            <h2 class="text-purple-500 text-3xl font-bold mb-4">Welcome to OtakuDex!</h2>
-            <p class="text-xl text-gray-400">Open **Settings** (gear icon) to scan your library and begin cataloging your media.</p>
-=======
-    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
-        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
-        </div>
-    
-    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
-        <div id="initial-state-message">
+    <div id="detail-view" class="detail-view flex-grow overflow-y-auto no-scrollbar relative">
+        <div id="initial-state-message" class="p-8 lg:p-12">
             <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
             <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
->>>>>>> Stashed changes
-=======
-  <title>Media Library</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <script>
-    // Customize Tailwind configuration to use the desired purple accent color
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            // Equivalent to the previous --accent-color: #a855f7;
-            'accent-purple': '#a855f7', 
-            // Equivalent to the previous --bg-color: #0d0d0d;
-            'bg-deep': '#0d0d0d', 
-            // Equivalent to the previous --card-bg: #1a1a1a;
-            'bg-card': '#1a1a1a', 
-            // Equivalent to the previous --secondary-text: #b3b3b3;
-            'text-secondary': '#b3b3b3', 
-            // Equivalent to the previous --border-color: #333333;
-            'border-dark': '#333333', 
-          },
-        }
-      }
-    }
-  </script>
-  
-  <style>
-    /* Custom styles for specific elements not easily handled by utility classes */
-    body {
-      /* Hide scrollbar for a cleaner look */
-      scrollbar-width: none; /* Firefox */
-    }
-    body::-webkit-scrollbar {
-      display: none; /* Chrome, Safari, Opera */
-    }
-    .no-scrollbar::-webkit-scrollbar {
-      display: none;
-    }
-    .no-scrollbar {
-      -ms-overflow-style: none; /* IE and Edge */
-      scrollbar-width: none; /* Firefox */
-    }
-    
-    /* Custom background for the dropdown arrow, matching the previous SVG setup */
-    .custom-select-bg {
-        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
-        background-repeat: no-repeat;
-        background-position: right 1rem center;
-        background-size: 0.65em auto;
-    }
-  </style>
-</head>
-<body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
-  
-  <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-10 border-b border-accent-purple">
-    <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">Media Catalog</div>
-    <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-      <i class="fa-solid fa-folder-open"></i> Scan Library
-    </button>
-  </div>
-
-  <div class="content-area flex-grow flex overflow-hidden">
-    
-    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
-        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
-        </div>
-    
-    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
-        <div id="initial-state-message">
-            <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
-            <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
->>>>>>> Stashed changes
         </div>
         
         </div>
 
   </div>
   
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-  <!-- Status Bar -->
-  <div id="status-container" class="status-message p-3 bg-black text-gray-400 text-center text-sm flex-shrink-0 border-t border-border-dark">
-      <div class="scan-status-container flex items-center justify-center min-h-[40px]">
-          <!-- Status messages and spinner injected here -->
-      </div>
-=======
-  <div id="status-container" class="status-message p-3 lg:px-8 bg-black text-text-secondary text-base flex-shrink-0 border-t border-border-dark">
-      <div class="scan-status-container flex items-center justify-center min-h-10">
+  <div id="status-container" class="status-message p-3 lg:px-8 bg-black text-text-secondary text-base flex-shrink-0 border-t border-border-dark flex flex-col">
+      <div id="scan-status-line" class="flex items-center justify-center min-h-10">
           </div>
->>>>>>> Stashed changes
+      <div id="metadata-progress-bar-container" class="w-full h-2 bg-border-dark rounded-full overflow-hidden transition-opacity duration-300 opacity-0 mb-1">
+          <div id="metadata-progress-bar" class="h-2 bg-accent-purple transition-all duration-300" style="width: 0%"></div>
+      </div>
   </div>
-
-  <!-- SETTINGS MODAL -->
-  <div id="settings-modal" 
-       class="modal-overlay hidden fixed inset-0 bg-black bg-opacity-80 z-[1000] flex justify-center items-center opacity-0 transition-opacity duration-300">
-    <!-- Updated class to use bg-modal-bg and a stronger shadow -->
-    <div class="modal-content bg-modal-bg rounded-xl w-11/12 max-w-3xl max-h-[90vh] overflow-y-auto p-8 shadow-2xl shadow-purple-900/50 transform scale-90 transition-transform duration-300">
-        <div class="modal-header flex justify-between items-center border-b-2 border-border-dark pb-4 mb-6">
-            <h2 class="m-0 text-purple-500 text-2xl font-bold">Application Settings</h2>
-            <button id="close-settings-button" class="text-gray-400 hover:text-white text-4xl cursor-pointer p-2 leading-none">&times;</button>
+  
+  <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm z-50 hidden flex justify-center items-center">
+    <div class="bg-bg-card w-full max-w-2xl p-8 rounded-xl shadow-2xl border border-border-dark">
+        <div class="flex justify-between items-center mb-6 border-b border-border-dark pb-3">
+            <h2 class="text-3xl font-bold text-accent-purple">Settings</h2>
+            <button id="close-settings-button" class="text-white hover:text-accent-purple text-2xl">
+                <i class="fa-solid fa-times"></i>
+            </button>
         </div>
-        
-        <div class="settings-section mb-8 pt-4 border-t border-border-dark first:border-t-0 first:pt-0">
-            <h3 class="text-xl text-white font-semibold mb-3">Library Management</h3>
-            <p class="text-gray-400 text-sm mb-4">Use this option to select the root folder containing your media files. Scanning may take time.</p>
-            <div class="flex items-center gap-4">
-                <button id="settings-scan-button" class="action-button bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg font-semibold cursor-pointer shadow-md transition duration-200 flex items-center gap-2">
-                    <i class="fa-solid fa-folder-open"></i> Scan Library
+
+        <form id="settings-form" class="space-y-6">
+            
+            <div>
+                <label for="media-root-path" class="block text-lg font-medium text-white mb-2">Media Folder Location</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="media-root-path" name="mediaRootPath" class="flex-grow bg-bg-deep border border-border-dark p-3 rounded-lg text-sm" readonly placeholder="No folder selected">
+                    <button type="button" id="change-root-path-button" class="bg-gray-700 text-white p-3 rounded-lg hover:bg-gray-600 transition duration-150 text-sm">
+                        <i class="fa-solid fa-folder"></i> Change
+                    </button>
+                </div>
+                <p class="text-text-secondary text-sm mt-1">This is the root directory where your TV shows are located.</p>
+            </div>
+
+            <div class="pt-4 border-t border-border-dark">
+                <h3 class="text-xl font-semibold text-white mb-4">Metadata Provider (AniList)</h3>
+
+                <div class="flex items-center justify-between mb-4">
+                    <label for="use-anilist" class="text-lg font-medium text-white">Enable AniList Metadata Fetching</label>
+                    <input type="checkbox" id="use-anilist" name="useAniList" class="h-6 w-12 rounded-full appearance-none bg-gray-600 checked:bg-accent-purple transition duration-200 ease-in-out cursor-pointer relative" role="switch">
+                </div>
+
+                <div>
+                    <label for="anilist-api-key" class="block text-lg font-medium text-white mb-2">AniList API Key (Optional)</label>
+                    <input type="password" id="anilist-api-key" name="aniListApiKey" class="w-full bg-bg-deep border border-border-dark p-3 rounded-lg text-sm" placeholder="Paste your personal access token (if needed)">
+                    <p class="text-text-secondary text-sm mt-1">The public API is used by default. An optional key can be used for higher rate limits.</p>
+                </div>
+            </div>
+
+            <div class="pt-6">
+                <button type="submit" id="save-settings-button" class="w-full bg-accent-purple text-white py-3 rounded-lg font-semibold hover:bg-purple-400 transition duration-200">
+                    <i class="fa-solid fa-save"></i> Save Settings
                 </button>
             </div>
-        </div>
-        
-        <div class="settings-section mb-8 pt-4 border-t border-border-dark">
-            <h3 class="text-xl text-white font-semibold mb-3">Metadata Configuration (WIP)</h3>
-            <p class="text-gray-400 text-sm mb-4">Select your preferred sources for retrieving show titles, descriptions, and episode information. </p>
-
-            <!-- Primary Provider -->
-            <label class="setting-label block font-semibold mt-4 mb-2 text-gray-400">Primary Metadata Provider:</label>
-            <div id="primary-provider-group" class="provider-group flex gap-4 flex-wrap">
-                <!-- Radio buttons injected by JS -->
-            </div>
-
-            <!-- Secondary/Backup Provider -->
-            <label class="setting-label block font-semibold mt-4 mb-2 text-gray-400">Backup Metadata Provider:</label>
-            <p class="text-xs text-gray-500 mb-2">Used if the primary provider fails to find a match or is unreachable.</p>
-            <div id="secondary-provider-group" class="provider-group flex gap-4 flex-wrap">
-                <!-- Radio buttons injected by JS -->
-            </div>
-        </div>
+        </form>
     </div>
-=======
-  <div id="status-container" class="status-message p-3 lg:px-8 bg-black text-text-secondary text-base flex-shrink-0 border-t border-border-dark">
-      <div class="scan-status-container flex items-center justify-center min-h-10">
-          </div>
->>>>>>> Stashed changes
   </div>
 
+
   <script>
-    // --- MOCK IPC BRIDGE FOR WEB ENVIRONMENT (Fix for window.api is undefined) ---
-    // This section simulates the native functions (like file picking and scanning) 
-    // that would normally be provided by an Electron preload script.
-    if (typeof window.api === 'undefined') {
-        const mockShows = [
-            {
-                id: 'show-a',
-                title: 'Mock Anime Title A',
-                rootPath: '/Users/mock/Anime/Mock_Anime_Title_A',
-                seasons: [
-                    {
-                        title: 'Season 1',
-                        episodes: [
-                            { fullPath: '/Users/mock/Anime/A/S1E1.mkv' },
-                            { fullPath: '/Users/mock/Anime/A/S1E2.mkv' },
-                            { fullPath: '/Users/mock/Anime/A/S1E3.mkv' },
-                        ]
-                    },
-                    {
-                        title: 'OVA/Extras',
-                        episodes: [
-                            { fullPath: '/Users/mock/Anime/A/OVA1.mkv' },
-                        ]
-                    }
-                ]
-            },
-            {
-                id: 'show-b',
-                title: 'Cool Manga Adaptation B',
-                rootPath: '/Users/mock/Anime/Cool_Manga_Adaptation_B',
-                seasons: [
-                    {
-                        title: 'Season 1',
-                        episodes: [
-                            { fullPath: '/Users/mock/Anime/B/S1E1.mp4' },
-                            { fullPath: '/Users/mock/Anime/B/S1E2.mp4' },
-                        ]
-                    }
-                ]
-            }
-        ];
-
-        window.api = {
-            // Mock: Returns cached data immediately 
-            fetchLibraryCache: () => Promise.resolve({
-                success: true,
-                message: "Loaded mock data from cache.",
-                shows: mockShows
-            }),
-
-            // Mock: Simulates opening a directory and selecting a path
-            openDirectoryDialog: () => Promise.resolve('/Users/mock/New_Scan_Folder'),
-
-            // Mock: Simulates scanning the library (takes a moment)
-            scanAndCacheLibrary: (rootPath) => new Promise(resolve => {
-                console.log(`[MOCK IPC] Simulating scan of: ${rootPath}`);
-                setTimeout(() => {
-                    resolve({
-                        success: true,
-                        message: "Mock scan completed successfully.",
-                        shows: mockShows
-                    });
-                }, 1500); // Simulate network/disk delay
-            }),
-            
-            // Mock: Simulates launching an external media player
-            launchExternal: (filePath) => {
-                console.log(`[MOCK IPC] Simulating external launch of: ${filePath}`);
-                return Promise.resolve({ success: true });
-            }
-        };
-        console.warn('MOCK IPC BRIDGE INITIALIZED: window.api is now simulated for development in the browser.');
-    }
-    // --- END MOCK IPC BRIDGE ---
-
     // --- APP STATE AND INITIALIZATION ---
     let appState = {
       shows: [],
       selectedShowId: null,
       selectedSeasonIndex: 0,
-      
-      // New State for Settings
-      metadataProviders: ['AniList', 'AniDB', 'TheTVDB'],
-      primaryProvider: 'AniList',
-      secondaryProvider: 'TheTVDB'
+      settings: {} // ADDED: Stores app settings
     };
     
     const elements = {
       sidebar: document.getElementById('sidebar'),
+      showListContainer: document.getElementById('show-list-container'),
       detailView: document.getElementById('detail-view'),
+      scanButton: document.getElementById('scan-button'),
       statusContainer: document.getElementById('status-container'),
+      scanStatusLine: document.getElementById('scan-status-line'),
       initialMessage: document.getElementById('initial-state-message'),
       showListTitle: document.getElementById('show-list-title'),
-
-      // Settings elements
       settingsButton: document.getElementById('settings-button'),
       settingsModal: document.getElementById('settings-modal'),
       closeSettingsButton: document.getElementById('close-settings-button'),
-      settingsScanButton: document.getElementById('settings-scan-button'),
-      primaryProviderGroup: document.getElementById('primary-provider-group'),
-      secondaryProviderGroup: document.getElementById('secondary-provider-group'),
+      settingsForm: document.getElementById('settings-form'),
+      mediaRootPathInput: document.getElementById('media-root-path'),
+      changeRootPathButton: document.getElementById('change-root-path-button'),
+      useAniListToggle: document.getElementById('use-anilist'),
+      anilistApiKeyInput: document.getElementById('anilist-api-key'),
+      metadataProgressContainer: document.getElementById('metadata-progress-bar-container'),
+      metadataProgressBar: document.getElementById('metadata-progress-bar'),
     };
     
-    // Tailwind specific colors
     const accentColor = '#a855f7';
     const secondaryTextColor = '#b3b3b3';
 
@@ -422,150 +173,65 @@
             
         let color = isError ? 'red' : (isLoading ? accentColor : secondaryTextColor);
         
-        elements.statusContainer.innerHTML = `
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            <div class="scan-status-container flex items-center justify-center min-h-[40px]" style="color:${color};">
-                ${spinner} ${message}
-=======
+        elements.scanStatusLine.innerHTML = `
             <div class="scan-status-container flex items-center justify-center min-h-10" style="color:${color};">
                 ${spinnerHTML} ${message}
->>>>>>> Stashed changes
-=======
-            <div class="scan-status-container flex items-center justify-center min-h-10" style="color:${color};">
-                ${spinnerHTML} ${message}
->>>>>>> Stashed changes
             </div>
         `;
-        // Only disable the scan button when scanning is active
-        elements.settingsScanButton.disabled = isLoading;
-    }
-
-    // UPDATED: Logic to manage Tailwind classes for fade-in/fade-out
-    function toggleSettingsModal(show) {
-        const modal = elements.settingsModal;
-        if (show === true) {
-            // 1. Make it visible (display: block)
-            modal.classList.remove('hidden');
-            
-            // 2. Trigger the opacity and scale transition after the browser registers display: block
-            setTimeout(() => {
-                modal.classList.remove('opacity-0', 'scale-90');
-                modal.classList.add('opacity-100', 'scale-100');
-            }, 10);
-            
-            renderMetadataProviders(); 
-        } else {
-            // 1. Start the fade-out transition
-            modal.classList.remove('opacity-100', 'scale-100');
-            modal.classList.add('opacity-0', 'scale-90');
-            
-            // 2. Hide completely with display: none after the 300ms transition finishes
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300); 
-        }
+        elements.scanButton.disabled = isLoading;
     }
     
-    function updateProviderState(type, value) {
-        if (type === 'primary') {
-            appState.primaryProvider = value;
-        } else if (type === 'secondary') {
-            appState.secondaryProvider = value;
-        }
+    // ADDED: Progress Bar UI Update Function
+    function updateMetadataProgress(status, current, total, message) {
+        const progressBarContainer = elements.metadataProgressContainer;
+        const progressBar = elements.metadataProgressBar;
+        const scanStatusLine = elements.scanStatusLine;
         
-        // Ensure primary and secondary providers are not the same
-        if (appState.primaryProvider === appState.secondaryProvider) {
-            // Find the next available provider that isn't the newly selected one
-            const nextProvider = appState.metadataProviders.find(p => p !== value);
+        if (status === 'start' || status === 'in-progress') {
+            const percentage = (current / total) * 100;
+            progressBar.style.width = `${percentage}%`;
+            progressBarContainer.classList.remove('opacity-0', 'hidden');
             
-            if (nextProvider) {
-                // If collision, force the *other* provider to the next available one
-                if (type === 'primary') {
-                    appState.secondaryProvider = nextProvider;
-                } else if (type === 'secondary') {
-                    appState.primaryProvider = nextProvider;
-                }
-            }
-            // Re-render to reflect correction
-            renderMetadataProviders(); 
-        }
-
-        console.log(`Provider updated. Primary: ${appState.primaryProvider}, Secondary: ${appState.secondaryProvider}`);
-        setStatus(`Settings updated. Primary metadata provider set to ${appState.primaryProvider}.`, false, false);
-    }
-    
-    function renderProviderOptions(type) {
-        const currentSelection = (type === 'primary') ? appState.primaryProvider : appState.secondaryProvider;
-        const group = (type === 'primary') ? elements.primaryProviderGroup : elements.secondaryProviderGroup;
-        const name = (type === 'primary') ? 'primary-provider' : 'secondary-provider';
-        
-        let html = '';
-        appState.metadataProviders.forEach(provider => {
-            const isSelected = provider === currentSelection;
-
-            html += `
-                <label class="provider-option flex items-center gap-2 p-2 border border-border-dark rounded-md cursor-pointer transition duration-150 hover:bg-gray-800">
-                    <input type="radio" 
-                           name="${name}" 
-                           value="${provider}" 
-                           data-type="${type}" 
-                           class="text-purple-500 focus:ring-purple-500"
-                           ${isSelected ? 'checked' : ''}>
-                    <span class="${isSelected ? 'text-purple-400 font-bold' : 'text-gray-300'}">${provider}</span>
-                </label>
+            // Update the status line
+            scanStatusLine.innerHTML = `
+                <div class="w-5 h-5 border-4 border-t-4 rounded-full animate-spin mr-2" 
+                     style="border-color: rgba(255, 255, 255, 0.1); border-top-color: ${accentColor};">
+                </div>
+                Metadata: ${current} of ${total} (${message})
             `;
-        });
-        
-        group.innerHTML = html;
-        
-        // Attach event listeners
-        group.querySelectorAll('input[type="radio"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                updateProviderState(e.target.dataset.type, e.target.value);
-            });
-        });
+            scanStatusLine.style.color = accentColor;
+            elements.scanButton.disabled = true;
+
+        } else if (status === 'complete') {
+            progressBar.style.width = '100%';
+            // Hide after a brief delay for visual effect
+            setTimeout(() => {
+                progressBarContainer.classList.add('opacity-0');
+                progressBar.style.width = '0%';
+            }, 1000);
+            setStatus(message, false, false); // Reset scan status line
+            elements.scanButton.disabled = false;
+        }
     }
 
-    function renderMetadataProviders() {
-        renderProviderOptions('primary');
-        renderProviderOptions('secondary');
-    }
 
     function setSelectedShow(showId) {
         const show = appState.shows.find(s => s.id === showId);
         if (!show) return;
 
         appState.selectedShowId = showId;
-        appState.selectedSeasonIndex = 0; // Default to the first season
+        appState.selectedSeasonIndex = 0;
         
-        // 1. Update sidebar selection class (Tailwind classes)
+        // 1. Update sidebar selection class
         document.querySelectorAll('.show-list-item').forEach(el => {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            el.classList.remove('bg-gray-800', 'border-purple-500', 'font-bold');
-            el.classList.add('hover:bg-gray-800/50');
-        });
-        const selectedEl = document.getElementById(`show-${showId}`);
-        selectedEl.classList.add('bg-gray-800', 'border-purple-500', 'font-bold');
-        selectedEl.classList.remove('hover:bg-gray-800/50');
-
-=======
             el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
             el.classList.add('border-transparent');
         });
         const selectedEl = document.getElementById(`show-${showId}`);
-        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
-        selectedEl.classList.remove('border-transparent');
->>>>>>> Stashed changes
-=======
-            el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
-            el.classList.add('border-transparent');
-        });
-        const selectedEl = document.getElementById(`show-${showId}`);
-        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
-        selectedEl.classList.remove('border-transparent');
->>>>>>> Stashed changes
+        if(selectedEl) {
+            selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
+            selectedEl.classList.remove('border-transparent');
+        }
         
         // 2. Render the detail view for the selected show
         renderDetailView(show);
@@ -584,7 +250,7 @@
     
     function renderShows() {
         if (appState.shows.length === 0) {
-            elements.sidebar.innerHTML = '';
+            elements.showListContainer.innerHTML = '';
             elements.showListTitle.classList.add('hidden');
             return;
         }
@@ -592,104 +258,70 @@
         elements.initialMessage.classList.add('hidden');
         elements.showListTitle.classList.remove('hidden');
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        let listHTML = elements.showListTitle.outerHTML; // Preserve the title element structure
-=======
-        // Use the existing element as a title and then append list items
         let listHTML = ''; 
->>>>>>> Stashed changes
-=======
-        // Use the existing element as a title and then append list items
-        let listHTML = ''; 
->>>>>>> Stashed changes
         
         appState.shows.forEach(show => {
-            // Tailwind classes applied for styling and hover effects
+            const posterUrl = show.metadata?.poster || '';
+            
             listHTML += `
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                <div class="show-list-item px-6 py-3 cursor-pointer text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800/50" id="show-${show.id}" data-id="${show.id}">
-=======
-                <div class="show-list-item px-6 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800" 
+                <div class="show-list-item px-4 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800 flex items-center space-x-3" 
                      id="show-${show.id}" 
                      data-id="${show.id}">
->>>>>>> Stashed changes
-=======
-                <div class="show-list-item px-6 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800" 
-                     id="show-${show.id}" 
-                     data-id="${show.id}">
->>>>>>> Stashed changes
-                    ${show.title}
+                    <div class="w-10 h-14 bg-gray-700 rounded-sm overflow-hidden flex-shrink-0">
+                        ${posterUrl ? `<img src="${posterUrl}" alt="Poster" class="w-full h-full object-cover">` : 
+                                      `<i class="fa-solid fa-tv text-xl text-text-secondary m-auto"></i>`}
+                    </div>
+                    <div class="truncate">${show.title}</div>
                 </div>
             `;
         });
         
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        const listContainer = document.createElement('div');
-        listContainer.innerHTML = listHTML;
-        elements.sidebar.innerHTML = ''; 
-        elements.sidebar.appendChild(listContainer);
-=======
-        // Injecting after the title
-        elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
-        elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
->>>>>>> Stashed changes
-=======
-        // Injecting after the title
-        elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
-        elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
->>>>>>> Stashed changes
+        elements.showListContainer.innerHTML = listHTML;
         
+        // Attach click listeners to the show list items
         document.querySelectorAll('.show-list-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 setSelectedShow(e.currentTarget.dataset.id);
             });
         });
 
+        // Automatically select the first show or the previously selected one
         const initialShowId = appState.selectedShowId || appState.shows[0].id;
         setSelectedShow(initialShowId);
     }
     
     function renderDetailView(show) {
+        const bannerUrl = show.metadata?.banner || '';
+        const description = show.metadata?.description || 'No description found. Try fetching metadata in the settings.';
+        
         let detailHTML = `
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            <div class="show-header mb-8">
-                <h1 class="text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="text-gray-400 text-lg">Template Metadata: Seasons found: ${show.seasons.length}</p>
-                <p class="text-gray-500 text-sm mt-1">Root Path: ${show.rootPath}</p>
-            </div>
-            
-            <select id="season-select" class="season-selector mb-8 p-2 bg-gray-700 border border-border-dark rounded-lg text-white appearance-none cursor-pointer">
-=======
-            <div class="show-header mb-12">
-                <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
-                <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
-            </div>
-            
-            <select id="season-select" class="season-selector custom-select-bg bg-gray-700 text-white p-3 lg:px-5 border border-gray-600 rounded-lg text-xl cursor-pointer mb-8 w-full max-w-sm appearance-none">
->>>>>>> Stashed changes
-=======
-            <div class="show-header mb-12">
-                <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
-                <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
-            </div>
-            
-            <select id="season-select" class="season-selector custom-select-bg bg-gray-700 text-white p-3 lg:px-5 border border-gray-600 rounded-lg text-xl cursor-pointer mb-8 w-full max-w-sm appearance-none">
->>>>>>> Stashed changes
-                ${show.seasons.map((season, index) => `
-                    <option value="${index}" ${index === appState.selectedSeasonIndex ? 'selected' : ''}>
-                        ${season.title} (${season.episodes.length} episodes)
-                    </option>
-                `).join('')}
-            </select>
-            
-            <div id="episode-list-container">
+            <div class="relative h-64 w-full flex-shrink-0 mb-6 bg-gray-900 overflow-hidden">
+                ${bannerUrl ? 
+                    `<img src="${bannerUrl}" alt="Show Banner" class="w-full h-full object-cover absolute inset-0 filter blur-sm">` : 
+                    `<div class="w-full h-full flex items-center justify-center bg-gray-900"><i class="fa-solid fa-image text-5xl text-gray-700"></i></div>`
+                }
+                <div class="banner-overlay absolute inset-0 flex items-end p-8 lg:p-12">
+                    <div class="text-white relative z-10">
+                        <h1 class="show-title text-5xl font-extrabold mb-2">${show.title}</h1>
+                        <p class="show-metadata text-text-secondary text-base max-w-4xl line-clamp-2">${description}</p>
+                    </div>
                 </div>
+            </div>
+
+            <div class="p-8 lg:p-12 pt-0">
+                <p class="show-metadata text-text-secondary text-sm mt-1 mb-4">Root Path: ${show.rootPath}</p>
+
+                <select id="season-select" class="season-selector custom-select-bg bg-gray-700 text-white p-3 lg:px-5 border border-gray-600 rounded-lg text-xl cursor-pointer mb-8 w-full max-w-sm appearance-none">
+                    ${show.seasons.map((season, index) => `
+                        <option value="${index}" ${index === appState.selectedSeasonIndex ? 'selected' : ''}>
+                            ${season.title} (${season.episodes.length} episodes)
+                        </option>
+                    `).join('')}
+                </select>
+                
+                <div id="episode-list-container">
+                    </div>
+            </div>
         `;
         
         elements.detailView.innerHTML = detailHTML;
@@ -705,60 +337,21 @@
         if (initialSeason) {
             renderEpisodes(initialSeason);
         } else {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            document.getElementById('episode-list-container').innerHTML = '<p class="text-gray-400">No episodes found in this season.</p>';
-=======
             document.getElementById('episode-list-container').innerHTML = '<p class="text-text-secondary">No episodes found in this season.</p>';
->>>>>>> Stashed changes
-=======
-            document.getElementById('episode-list-container').innerHTML = '<p class="text-text-secondary">No episodes found in this season.</p>';
->>>>>>> Stashed changes
         }
     }
     
     function renderEpisodes(season) {
         const container = document.getElementById('episode-list-container');
-        if (!container) return; 
+        if (!container) return;
 
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        let episodeHTML = '<div class="episode-list grid gap-6">';
-=======
         let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
->>>>>>> Stashed changes
-=======
-        let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
->>>>>>> Stashed changes
         
         season.episodes.forEach((episode, index) => {
             const episodeNumber = index + 1; 
-<<<<<<< Updated upstream
-=======
-            
-            // Extract the simple filename for the status message
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
-            const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
-                                   episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
-                                   episode.fullPath;
+            const description = episode.description || 'No episode description available. Fetching metadata may provide one.';
 
-            // Tailwind classes for the episode card structure and appearance
             episodeHTML += `
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-                <div class="episode-card bg-card-dark rounded-xl overflow-hidden flex shadow-xl border border-border-dark transform transition duration-200 hover:scale-[1.01] hover:shadow-purple-500/30">
-                    <div class="episode-template-img">S${appState.selectedSeasonIndex + 1} E${episodeNumber}</div>
-                    <div class="episode-info p-4 flex flex-col justify-between flex-grow">
-                        <div>
-                            <div class="episode-title text-lg font-semibold text-white truncate">${episodeFileName}</div>
-                            <div class="episode-description text-gray-400 text-sm mt-1">Template description: A placeholder description for the episode plot and details.</div>
-                        </div>
-                        <button class="action-button bg-purple-600 hover:bg-purple-500 text-white py-1 px-3 rounded-md text-sm font-medium mt-3 self-start transition duration-150 flex items-center gap-1" data-path="${episode.fullPath}">
-                            <i class="fa-solid fa-play text-xs"></i> Play
-=======
                 <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
                     <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
                         S${appState.selectedSeasonIndex + 1} E${episodeNumber}
@@ -766,22 +359,10 @@
                     <div class="episode-info p-4 flex-grow flex flex-col justify-between">
                         <div>
                             <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
-                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
+                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">${description}</div>
                         </div>
-=======
-                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
-                    <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
-                        S${appState.selectedSeasonIndex + 1} E${episodeNumber}
-                    </div>
-                    <div class="episode-info p-4 flex-grow flex flex-col justify-between">
-                        <div>
-                            <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
-                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
-                        </div>
->>>>>>> Stashed changes
                         <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" data-path="${episode.fullPath}">
                             <i class="fa-solid fa-play"></i> Play
->>>>>>> Stashed changes
                         </button>
                     </div>
                 </div>
@@ -791,9 +372,11 @@
         episodeHTML += '</div>';
         container.innerHTML = episodeHTML;
         
-        document.querySelectorAll('.episode-card .action-button').forEach(button => {
+        // Attach click listeners to all Play buttons
+        document.querySelectorAll('.play-button').forEach(button => {
             button.addEventListener('click', async (e) => {
                 const filePath = e.currentTarget.dataset.path;
+                
                 const episodeFileName = filePath.substring(filePath.lastIndexOf('/') + 1) || 
                                        filePath.substring(filePath.lastIndexOf('\\') + 1) || 
                                        filePath;
@@ -811,79 +394,136 @@
         });
     }
 
+    // --- SETTINGS MANAGEMENT ---
+    
+    async function loadSettings() {
+        const response = await window.api.loadSettings();
+        if (response.success) {
+            appState.settings = response.settings;
+            // Apply settings to the UI
+            elements.mediaRootPathInput.value = response.settings.mediaRootPath || '';
+            elements.useAniListToggle.checked = response.settings.useAniList;
+            elements.anilistApiKeyInput.value = response.settings.aniListApiKey || '';
+            
+            // Set the scan button root path if it's saved
+            if (response.settings.mediaRootPath) {
+                elements.scanButton.dataset.rootPath = response.settings.mediaRootPath;
+            }
+        } else {
+            setStatus(`Settings Error: ${response.message}`, true, false);
+        }
+    }
+
+    async function saveSettings(settings) {
+        const response = await window.api.saveSettings(settings);
+        if (response.success) {
+            // Update app state and UI on successful save
+            appState.settings = { ...settings, _rev: response.rev }; 
+            elements.mediaRootPathInput.value = settings.mediaRootPath || '';
+            elements.scanButton.dataset.rootPath = settings.mediaRootPath;
+            setStatus('Settings saved.', false, false);
+            // Close the modal after saving
+            elements.settingsModal.classList.add('hidden');
+        } else {
+            setStatus(`Save Error: ${response.message}`, true, false);
+        }
+    }
+
     // --- MAIN EVENT HANDLERS ---
     
     document.addEventListener('DOMContentLoaded', () => {
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        // Event listeners for Settings Modal
-        elements.settingsButton.addEventListener('click', () => toggleSettingsModal(true));
-        elements.closeSettingsButton.addEventListener('click', () => toggleSettingsModal(false));
-        // Allow clicking outside the modal content to close it
-        elements.settingsModal.addEventListener('click', (e) => {
-            if (e.target.id === 'settings-modal') {
-                toggleSettingsModal(false);
+        // 1. Load settings first
+        loadSettings().then(() => {
+            // 2. Load cached library data
+            window.api.fetchLibraryCache().then(response => {
+                if (response.shows && response.shows.length > 0) {
+                    appState.shows = response.shows;
+                    setStatus(response.message);
+                    renderShows();
+                    
+                    // 3. Automatically trigger metadata fetch for any updates
+                    if (appState.settings.useAniList) {
+                        window.api.fetchMetadataForLibrary(appState.shows, appState.settings);
+                    }
+                } else {
+                    setStatus('Ready to scan. No local cache found.', false, false);
+                }
+            });
+        });
+
+        // Register Metadata Progress Listener
+        window.api.onMetadataProgress((data) => {
+            updateMetadataProgress(data.status, data.current, data.total, data.message);
+            
+            // If fetching is complete, reload the library to show new metadata
+            if (data.status === 'complete') {
+                 window.api.fetchLibraryCache().then(response => {
+                    if (response.shows && response.shows.length > 0) {
+                        appState.shows = response.shows;
+                        renderShows(); // Re-render the UI with new metadata
+                    }
+                });
+            }
+        });
+
+        // Scan Button Handler
+        elements.scanButton.addEventListener('click', async () => {
+            let rootPath = appState.settings.mediaRootPath;
+
+            if (!rootPath) {
+                 setStatus('Please set your media folder in Settings first.', true, false);
+                 return;
+            }
+
+            setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
+            
+            const response = await window.api.scanAndCacheLibrary(rootPath);
+            
+            if (response.success) {
+                appState.shows = response.shows;
+                setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
+                renderShows(); 
+                
+                // Trigger metadata fetch after a successful scan
+                if (appState.settings.useAniList) {
+                    window.api.fetchMetadataForLibrary(appState.shows, appState.settings);
+                }
+
+            } else {
+                setStatus(`Scan Error: ${response.message}`, true, false);
             }
         });
         
-        // Initial load of cached data
-=======
-        // Initial load of cached data (PouchDB)
->>>>>>> Stashed changes
-=======
-        // Initial load of cached data (PouchDB)
->>>>>>> Stashed changes
-        window.api.fetchLibraryCache().then(response => {
-            if (response.shows && response.shows.length > 0) {
-                appState.shows = response.shows;
-                setStatus(response.message);
-                renderShows();
-            } else {
-                setStatus('Ready to scan. Open Settings to begin.', false, false);
+        // --- Settings Modal Handlers ---
+
+        elements.settingsButton.addEventListener('click', () => {
+            loadSettings(); // Reload settings before opening
+            elements.settingsModal.classList.remove('hidden');
+        });
+        
+        elements.closeSettingsButton.addEventListener('click', () => {
+            elements.settingsModal.classList.add('hidden');
+        });
+
+        elements.changeRootPathButton.addEventListener('click', async () => {
+            const rootPath = await window.api.openDirectoryDialog();
+            if (rootPath) {
+                elements.mediaRootPathInput.value = rootPath;
             }
         });
 
-        // Scan Button Handler (Now inside Settings)
-        elements.settingsScanButton.addEventListener('click', async () => {
-            console.log('SCAN BUTTON CLICKED. Starting library scan...');
-
-            // The mock check is now done at the top of the script, but we keep this log for user clarity
-            if (typeof window.api === 'undefined' || typeof window.api.openDirectoryDialog !== 'function') {
-                setStatus('Error: IPC Bridge not found (Check preload script and main.js config).', true, false);
-                console.error('window.api or openDirectoryDialog is UNDEFINED. Preload script is likely missing or misconfigured.');
-                return;
-            }
-
-            setStatus('Opening directory selector...', false, true);
+        elements.settingsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
             
-            try {
-                // 1. Get the root path
-                const rootPath = await window.api.openDirectoryDialog();
-
-                if (!rootPath) {
-                    setStatus('Scan canceled by user.', false, false);
-                    return;
-                }
-                
-                // Close settings modal immediately before starting the long scan operation
-                toggleSettingsModal(false);
-                setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
-                
-                // 2. Call the main process to scan and cache
-                const response = await window.api.scanAndCacheLibrary(rootPath);
-                
-                if (response.success) {
-                    appState.shows = response.shows;
-                    setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
-                    renderShows(); // RENDER THE DATA
-                } else {
-                    setStatus(`Scan Error: ${response.message}`, true, false);
-                }
-            } catch (error) {
-                console.error("IPC Call Failed during Scan:", error);
-                setStatus(`Fatal IPC Error: ${error.message}. See console.`, true, false);
-            }
+            const newSettings = {
+                mediaRootPath: elements.mediaRootPathInput.value,
+                useAniList: elements.useAniListToggle.checked,
+                aniListApiKey: elements.anilistApiKeyInput.value.trim()
+            };
+            
+            saveSettings(newSettings);
         });
+
     });
   </script>
 </body>
