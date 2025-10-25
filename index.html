@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Media Library</title>
+  <title>OtakuPlayer</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
@@ -58,10 +58,15 @@
 <body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
   
   <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-10 border-b border-accent-purple">
-    <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">Media Catalog</div>
-    <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-      <i class="fa-solid fa-folder-open"></i> Scan Library
-    </button>
+    <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">OtakuPlayer</div>
+    <div class="flex items-center space-x-4">
+        <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+          <i class="fa-solid fa-folder-open"></i> Scan Library
+        </button>
+        <button id="settings-button" class="text-white text-3xl transition duration-200 hover:text-accent-purple transform hover:rotate-12">
+            <i class="fa-solid fa-gear"></i>
+        </button>
+    </div>
   </div>
 
   <div class="content-area flex-grow flex overflow-hidden">
@@ -99,7 +104,9 @@
       scanButton: document.getElementById('scan-button'),
       statusContainer: document.getElementById('status-container'),
       initialMessage: document.getElementById('initial-state-message'),
-      showListTitle: document.getElementById('show-list-title')
+      showListTitle: document.getElementById('show-list-title'),
+      // Added the new settings button element
+      settingsButton: document.getElementById('settings-button') 
     };
     
     // Tailwind specific colors
@@ -122,6 +129,8 @@
             </div>
         `;
         elements.scanButton.disabled = isLoading;
+        // Disable settings button while loading/scanning
+        elements.settingsButton.disabled = isLoading; 
     }
 
     function setSelectedShow(showId) {
@@ -331,6 +340,12 @@
             } else {
                 setStatus(`Scan Error: ${response.message}`, true, false);
             }
+        });
+
+        // Settings Button Handler (Placeholder for future functionality)
+        elements.settingsButton.addEventListener('click', () => {
+            // Placeholder: Could open a modal or navigate to a settings view
+            setStatus('Settings panel clicked (Feature not implemented yet).', false, false);
         });
     });
   </script>
