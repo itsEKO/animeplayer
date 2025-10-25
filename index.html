@@ -487,7 +487,7 @@
         let detailHTML = `
             <div class="show-header mb-12">
                 <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata.description}: Seasons found: ${show.seasons.length}</p>
                 <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
             </div>
             
@@ -606,7 +606,7 @@
 
         // --- EVENT LISTENERS ---
 
-        // Scan Button Handler (UPDATED to trigger metadata fetch)
+        // Scan Button Handler (UPDATED to trigger metadata fetch for all shows)
         elements.scanButton.addEventListener('click', async () => {
             if (appState.libraryPaths.length === 0) {
                 setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
@@ -615,7 +615,7 @@
             
             setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
             
-            // 2. Call the main process to scan and cache all paths
+            // Call the main process to scan and cache all paths
             const scanResponse = await window.api.scanAndCacheLibrary(appState.libraryPaths);
             
             if (scanResponse.success) {
@@ -623,31 +623,30 @@
                 setStatus(`Scan complete! Found ${scanResponse.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
                 renderShows(); // RENDER THE DATA
 
-                // --- NEW: Trigger Metadata Fetching after successful file scan ---
+                // --- NEW: Trigger Metadata Fetching for all shows after successful file scan ---
                 if (appState.metadataSettings.providers.anilist.enabled) {
-                    setStatus('Starting Anilist metadata refresh in background...', false, true);
+                    setStatus('Starting Anilist metadata refresh for all shows in background...', false, true);
                     
-                    // Simple example: fetch metadata for the first show found
                     if (appState.shows.length > 0) {
-                         const showTitle = appState.shows[0].title;
-                         // Call the new IPC handler - this is ASYNCHRONOUS
-                         window.api.fetchAndCacheAnilistMetadata(showTitle) 
-                            .then(metaResponse => {
+                        // Sequentially fetch metadata for each show to avoid overwhelming the API
+                        for (const show of appState.shows) {
+                            setStatus(`Fetching metadata for ${show.title}...`, false, true);
+                            try {
+                                const metaResponse = await window.api.fetchAndCacheAnilistMetadata(show.title);
                                 if (metaResponse.success) {
-                                     // Success status is just a short confirmation
-                                     setStatus(`Metadata for ${showTitle} updated (Simulated).`, false, false);
-                                     // After a short delay, restore the main status
-                                     setTimeout(() => setStatus('Ready.', false, false), 3000); 
+                                    setStatus(`Metadata for ${show.title} updated.`, false, false);
                                 } else {
-                                     setStatus(`Metadata error for ${showTitle}: ${metaResponse.message}`, true, false);
+                                    setStatus(`Metadata error for ${show.title}: ${metaResponse.message}`, true, false);
                                 }
-                            })
-                            .catch(error => {
-                                setStatus(`Background metadata fetch failed: ${error.message}`, true, false);
-                            });
+                            } catch (error) {
+                                setStatus(`Metadata fetch failed for ${show.title}: ${error.message}`, true, false);
+                            }
+                            // Brief delay to respect Anilist rate limits (90 requests/minute)
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                        setStatus('Metadata refresh complete for all shows.', false, false);
                     } else {
-                         // No shows to fetch metadata for, revert status
-                         setTimeout(() => setStatus('Scan complete, but no shows found.', false, false), 2000);
+                        setStatus('Scan complete, but no shows found.', false, false);
                     }
                 }
             } else {

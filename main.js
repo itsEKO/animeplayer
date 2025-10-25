@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const PouchDB = require('pouchdb');
 const crypto = require('crypto');
+// Removed static fetch import to avoid potential resolution issues
 
 // --- PouchDB Setup ---
 
@@ -209,32 +210,114 @@ function registerIpcHandlers() {
         }
     });
 
-    // 6. NEW: Placeholder for asynchronous Anilist Metadata Fetching and Caching
+    // 6. NEW: Fetch and cache Anilist metadata
     ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
-        console.log(`[METADATA] Attempting to fetch Anilist metadata for: ${showTitle}`);
+        console.log(`[METADATA] Fetching Anilist metadata for: ${showTitle}`);
         
-        // --- API FRIENDLY, ASYNCHRONOUS PLACEHOLDER LOGIC ---
-        // In a real application, this would involve making a GraphQL request to Anilist.
-        // We simulate success and non-blocking nature for now.
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network latency and work
-
-        // Simulate a successful result
-        const mockMetadata = {
-            anilistId: 12345,
-            description: `This is a simulated description for ${showTitle} from Anilist.`,
-            coverImage: 'placeholder_url',
-            genres: ['Action', 'Sci-Fi']
-        };
-        
-        console.log(`[METADATA] Successfully simulated fetching and caching Anilist metadata for ${showTitle}.`);
-        
-        // In a complete implementation, the results would be saved to PouchDB
-        // and merged with the show's data in the CACHE_DOC_ID.
-        
-        return { success: true, metadata: mockMetadata };
+        try {
+            // Dynamically require node-fetch with error handling
+            let fetch;
+            try {
+                fetch = require('node-fetch');
+            } catch (importError) {
+                console.error('[METADATA] Failed to load node-fetch:', importError);
+                return { success: false, message: `Failed to load node-fetch: ${importError.message}` };
+            }
+            
+            // AniList GraphQL API endpoint
+            const ANILIST_API_URL = 'https://graphql.anilist.co';
+            
+            // GraphQL query to search for anime by title
+            const query = `
+                query ($search: String) {
+                    Media(search: $search, type: ANIME) {
+                        id
+                        description
+                        coverImage { large }
+                        genres
+                    }
+                }
+            `;
+            
+            // Variables for the GraphQL query
+            const variables = { search: showTitle };
+            
+            // Make the API request
+            const response = await fetch(ANILIST_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ query, variables })
+            });
+            
+            const data = await response.json();
+            
+            if (data.errors) {
+                console.error('[METADATA] AniList API error:', data.errors);
+                return { success: false, message: `AniList API error: ${data.errors[0].message}` };
+            }
+            
+            const media = data.data.Media;
+            if (!media) {
+                console.error('[METADATA] No media found for:', showTitle);
+                return { success: false, message: `No media found for ${showTitle}` };
+            }
+            
+            // Extract metadata
+            const metadata = {
+                anilistId: media.id,
+                description: media.description || 'No description available.',
+                coverImage: media.coverImage?.large || 'placeholder_url',
+                genres: media.genres || []
+            };
+            
+            // Update PouchDB cache with metadata
+            try {
+                let cacheDoc = await db.get(CACHE_DOC_ID);
+                let shows = cacheDoc.shows || [];
+                
+                // Find the show by title and update its metadata
+                const showIndex = shows.findIndex(show => show.title === showTitle);
+                if (showIndex !== -1) {
+                    shows[showIndex].anilistMetadata = metadata;
+                    cacheDoc.shows = shows;
+                    await db.put(cacheDoc);
+                    console.log(`[METADATA] Successfully cached Anilist metadata for ${showTitle}`);
+                } else {
+                    console.error(`[METADATA] Show ${showTitle} not found in cache`);
+                    return { success: false, message: `Show ${showTitle} not found in cache` };
+                }
+                
+                return { success: true, metadata };
+            } catch (error) {
+                console.error('[POUCHDB] Error updating cache with metadata:', error);
+                return { success: false, message: `PouchDB error: ${error.message}` };
+            }
+            
+        } catch (error) {
+            console.error('[METADATA] Error fetching Anilist metadata:', error);
+            return { success: false, message: `Failed to fetch metadata: ${error.message}` };
+        }
     });
 
-    // 7. UPDATED: Scan ALL libraries and cache the results
+    // 7. NEW: Fetch library cache
+    ipcMain.handle('fetch-library-cache', async () => {
+        try {
+            const doc = await db.get(CACHE_DOC_ID);
+            return { success: true, shows: doc.shows || [], message: 'Cache retrieved successfully.' };
+        } catch (error) {
+            if (error.status === 404) {
+                // If cache doesn't exist, return empty shows array
+                return { success: true, shows: [], message: 'No cache found.' };
+            }
+            console.error('[POUCHDB] Fetch Library Cache Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 8. UPDATED: Scan ALL libraries and cache the results
     ipcMain.handle('scan-and-cache-library', async (event, rootPaths) => {
         try {
             if (!Array.isArray(rootPaths) || rootPaths.length === 0) {
@@ -278,7 +361,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 8. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
+    // 9. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
     ipcMain.handle('launch-external', async (event, filePath) => {
         try {
             const result = await shell.openPath(filePath);
