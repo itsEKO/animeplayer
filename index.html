@@ -606,7 +606,7 @@
 
         // --- EVENT LISTENERS ---
 
-        // Scan Button Handler (UPDATED to trigger metadata fetch)
+        // Scan Button Handler (UPDATED to trigger metadata fetch for all shows)
         elements.scanButton.addEventListener('click', async () => {
             if (appState.libraryPaths.length === 0) {
                 setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
