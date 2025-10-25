@@ -8,7 +8,12 @@ contextBridge.exposeInMainWorld('api', {
 
     // Data Management
     fetchLibraryCache: () => ipcRenderer.invoke('fetch-library-cache'),
-    scanAndCacheLibrary: (rootPath) => ipcRenderer.invoke('scan-and-cache-library', rootPath),
+    // scanAndCacheLibrary now expects an array of paths
+    scanAndCacheLibrary: (rootPaths) => ipcRenderer.invoke('scan-and-cache-library', rootPaths),
+    
+    // NEW: Library Path Management
+    fetchLibraryPaths: () => ipcRenderer.invoke('fetch-library-paths'),
+    saveLibraryPaths: (paths) => ipcRenderer.invoke('save-library-paths', paths),
 });
 
 // Log to confirm preload script execution

@@ -53,6 +53,13 @@
         background-position: right 1rem center;
         background-size: 0.65em auto;
     }
+
+    /* Modal Styling */
+    .modal-overlay {
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+        background-color: rgba(0, 0, 0, 0.75);
+    }
   </style>
 </head>
 <body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
@@ -61,7 +68,7 @@
     <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">OtakuPlayer</div>
     <div class="flex items-center space-x-4">
         <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
-          <i class="fa-solid fa-folder-open"></i> Scan Library
+          <i class="fa-solid fa-sync-alt"></i> Scan Library
         </button>
         <button id="settings-button" class="text-white text-3xl transition duration-200 hover:text-accent-purple transform hover:rotate-12">
             <i class="fa-solid fa-gear"></i>
@@ -77,8 +84,10 @@
     
     <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
         <div id="initial-state-message">
-            <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
-            <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
+            <h2 class="text-3xl font-bold text-accent-purple">Welcome to OtakuPlayer!</h2>
+            <p class="text-xl text-text-secondary mt-2" id="initial-scan-instruction">
+                Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".
+            </p>
         </div>
         
         </div>
@@ -90,12 +99,38 @@
           </div>
   </div>
 
+  <!-- Settings Modal Structure -->
+  <div id="settings-modal" class="modal-overlay fixed inset-0 hidden items-center justify-center">
+    <div class="bg-bg-deep p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-border-dark transform transition-all duration-300 scale-100">
+      <div class="flex justify-between items-center border-b border-border-dark pb-4 mb-6">
+        <h3 class="text-3xl font-bold text-accent-purple"><i class="fa-solid fa-gear mr-3"></i>Settings</h3>
+        <button id="close-settings-button" class="text-white hover:text-accent-purple text-xl"><i class="fa-solid fa-times"></i></button>
+      </div>
+
+      <h4 class="text-xl font-semibold mb-3">Media Library Folders</h4>
+      <div id="library-paths-container" class="space-y-3 max-h-80 overflow-y-auto pr-2 mb-6 no-scrollbar">
+        <!-- Library paths will be rendered here -->
+      </div>
+      
+      <button id="add-library-button" class="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-semibold transition duration-200 hover:bg-green-700 shadow-md">
+        <i class="fa-solid fa-plus-circle mr-2"></i> Add New Library Folder
+      </button>
+
+      <div class="mt-8 pt-4 border-t border-border-dark flex justify-end">
+         <p class="text-text-secondary text-sm">Changes are saved automatically when adding/removing.</p>
+      </div>
+    </div>
+  </div>
+
+
   <script>
     // --- APP STATE AND INITIALIZATION ---
     let appState = {
       shows: [],
       selectedShowId: null,
-      selectedSeasonIndex: 0
+      selectedSeasonIndex: 0,
+      // NEW: Array to hold the root paths
+      libraryPaths: [] 
     };
     
     const elements = {
@@ -105,8 +140,14 @@
       statusContainer: document.getElementById('status-container'),
       initialMessage: document.getElementById('initial-state-message'),
       showListTitle: document.getElementById('show-list-title'),
-      // Added the new settings button element
-      settingsButton: document.getElementById('settings-button') 
+      settingsButton: document.getElementById('settings-button'),
+      
+      // NEW: Settings Modal Elements
+      settingsModal: document.getElementById('settings-modal'),
+      closeSettingsButton: document.getElementById('close-settings-button'),
+      libraryPathsContainer: document.getElementById('library-paths-container'),
+      addLibraryButton: document.getElementById('add-library-button'),
+      initialScanInstruction: document.getElementById('initial-scan-instruction')
     };
     
     // Tailwind specific colors
@@ -131,6 +172,12 @@
         elements.scanButton.disabled = isLoading;
         // Disable settings button while loading/scanning
         elements.settingsButton.disabled = isLoading; 
+        
+        // Disable settings controls if the modal is open
+        if (!elements.settingsModal.classList.contains('hidden')) {
+            elements.addLibraryButton.disabled = isLoading;
+            document.querySelectorAll('.remove-library-button').forEach(btn => btn.disabled = isLoading);
+        }
     }
 
     function setSelectedShow(showId) {
@@ -166,8 +213,18 @@
     
     function renderShows() {
         if (appState.shows.length === 0) {
-            elements.sidebar.innerHTML = '';
+            elements.sidebar.innerHTML = elements.showListTitle.outerHTML; // Keep title element for structure
             elements.showListTitle.classList.add('hidden');
+            
+            // Show initial message again if library is empty
+            elements.initialMessage.classList.remove('hidden'); 
+            
+            // Update instruction based on whether paths exist
+            if (appState.libraryPaths.length > 0) {
+                 elements.initialScanInstruction.innerHTML = 'You have set your library paths. Click "**Scan Library**" to load your collection.';
+            } else {
+                 elements.initialScanInstruction.innerHTML = 'Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".';
+            }
             return;
         }
 
@@ -188,7 +245,6 @@
         });
         
         // Injecting after the title
-        elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
         elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
         
         // Attach click listeners to the show list items
@@ -203,6 +259,116 @@
         setSelectedShow(initialShowId);
     }
     
+    // Renders the list of library paths in the settings modal
+    function renderLibraryPaths() {
+        if (appState.libraryPaths.length === 0) {
+            elements.libraryPathsContainer.innerHTML = '<p class="text-text-secondary p-2">No folders added yet. Click "Add New Library Folder".</p>';
+            return;
+        }
+
+        let pathsHTML = '';
+        appState.libraryPaths.forEach((path, index) => {
+            pathsHTML += `
+                <div class="flex items-center justify-between p-3 bg-bg-card rounded-lg border border-border-dark">
+                    <span class="text-sm font-mono text-text-secondary truncate pr-4" title="${path}">${path}</span>
+                    <button class="remove-library-button text-red-500 hover:text-red-400 p-1 rounded-full transition duration-150" data-index="${index}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        
+        elements.libraryPathsContainer.innerHTML = pathsHTML;
+
+        // Attach event listeners to remove buttons
+        document.querySelectorAll('.remove-library-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const index = parseInt(e.currentTarget.dataset.index, 10);
+                removeLibraryPath(index);
+            });
+        });
+    }
+
+    // --- SETTINGS MODAL FUNCTIONS ---
+
+    function openSettingsModal() {
+        // Fetch and render the latest paths when opening
+        fetchAndRenderPaths(); 
+        elements.settingsModal.classList.remove('hidden');
+        elements.settingsModal.classList.add('flex');
+    }
+
+    function closeSettingsModal() {
+        elements.settingsModal.classList.add('hidden');
+        elements.settingsModal.classList.remove('flex');
+    }
+
+    async function fetchAndRenderPaths() {
+        setStatus('Fetching library paths...', false, true);
+        const response = await window.api.fetchLibraryPaths();
+        setStatus(response.success ? 'Ready.' : `Error fetching paths: ${response.message}`, !response.success, false);
+        
+        if (response.success) {
+            appState.libraryPaths = response.paths;
+            renderLibraryPaths();
+            renderShows(); // Re-render shows to update initial instruction if needed
+        }
+    }
+    
+    async function addLibraryPath() {
+        setStatus('Opening directory selector...', false, true);
+        const newPath = await window.api.openDirectoryDialog();
+
+        if (newPath) {
+            // Check for duplicates
+            if (appState.libraryPaths.includes(newPath)) {
+                setStatus('Path already added.', true, false);
+                return;
+            }
+
+            // Update state and save
+            appState.libraryPaths.push(newPath);
+            setStatus('Saving new path...', false, true);
+            const response = await window.api.saveLibraryPaths(appState.libraryPaths);
+            
+            if (response.success) {
+                setStatus('Library path added successfully!', false, false);
+                renderLibraryPaths();
+                renderShows(); // Re-render shows to update initial instruction
+            } else {
+                // If save fails, remove the path we just added
+                appState.libraryPaths.pop(); 
+                setStatus(`Error saving path: ${response.message}`, true, false);
+            }
+        } else {
+            setStatus('Add path canceled.', false, false);
+        }
+    }
+
+    async function removeLibraryPath(index) {
+        if (index < 0 || index >= appState.libraryPaths.length) return;
+
+        // Remove from state
+        const removedPath = appState.libraryPaths.splice(index, 1)[0]; 
+
+        setStatus(`Removing ${removedPath}...`, false, true);
+        const response = await window.api.saveLibraryPaths(appState.libraryPaths);
+
+        if (response.success) {
+            setStatus('Library path removed successfully. Please click "Scan Library" to update your collection.', false, false);
+            renderLibraryPaths();
+            renderShows(); // Re-render shows to update initial instruction
+        } else {
+            // If save fails, put the path back
+            appState.libraryPaths.splice(index, 0, removedPath); 
+            setStatus(`Error removing path: ${response.message}`, true, false);
+        }
+    }
+
+
+    // The rest of the rendering functions (renderDetailView, renderEpisodes) 
+    // remain the same as they only deal with the content and not the path management.
+
     function renderDetailView(show) {
         let detailHTML = `
             <div class="show-header mb-12">
@@ -302,10 +468,16 @@
         });
     }
 
+
     // --- MAIN EVENT HANDLERS ---
     
-    document.addEventListener('DOMContentLoaded', () => {
-        // Initial load of cached data (PouchDB)
+    document.addEventListener('DOMContentLoaded', async () => {
+        // --- INITIAL SETUP ---
+        
+        // 1. Fetch library paths first
+        await fetchAndRenderPaths();
+        
+        // 2. Initial load of cached data (PouchDB)
         window.api.fetchLibraryCache().then(response => {
             if (response.shows && response.shows.length > 0) {
                 appState.shows = response.shows;
@@ -316,37 +488,44 @@
             }
         });
 
-        // Scan Button Handler
-        elements.scanButton.addEventListener('click', async () => {
-            setStatus('Opening directory selector...', false, true);
-            
-            // 1. Get the root path
-            const rootPath = await window.api.openDirectoryDialog();
+        // --- EVENT LISTENERS ---
 
-            if (!rootPath) {
-                setStatus('Scan canceled by user.', false, false);
+        // Scan Button Handler (UPDATED to use stored paths)
+        elements.scanButton.addEventListener('click', async () => {
+            if (appState.libraryPaths.length === 0) {
+                setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
                 return;
             }
             
-            setStatus(`Scanning '${rootPath}'... This may take a moment.`, false, true);
+            setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
             
-            // 2. Call the main process to scan and cache
-            const response = await window.api.scanAndCacheLibrary(rootPath);
+            // 2. Call the main process to scan and cache all paths
+            // IMPORTANT: Now passing the array of paths
+            const response = await window.api.scanAndCacheLibrary(appState.libraryPaths);
             
             if (response.success) {
                 appState.shows = response.shows;
-                setStatus(`Scan complete! Found ${response.shows.length} shows.`, false, false);
+                setStatus(`Scan complete! Found ${response.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
                 renderShows(); // RENDER THE DATA
             } else {
                 setStatus(`Scan Error: ${response.message}`, true, false);
             }
         });
 
-        // Settings Button Handler (Placeholder for future functionality)
-        elements.settingsButton.addEventListener('click', () => {
-            // Placeholder: Could open a modal or navigate to a settings view
-            setStatus('Settings panel clicked (Feature not implemented yet).', false, false);
+        // Settings Button Handler
+        elements.settingsButton.addEventListener('click', openSettingsModal);
+        
+        // Modal Close Handlers
+        elements.closeSettingsButton.addEventListener('click', closeSettingsModal);
+        elements.settingsModal.addEventListener('click', (e) => {
+            // Close if clicking the overlay but not the modal content itself
+            if (e.target === elements.settingsModal) {
+                closeSettingsModal();
+            }
         });
+
+        // Add New Library Button Handler
+        elements.addLibraryButton.addEventListener('click', addLibraryPath);
     });
   </script>
 </body>
