@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<<<<<<< Updated upstream
   <title>OtakuDex</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -77,11 +78,72 @@
     <div class="header-title text-2xl font-extrabold text-purple-500 tracking-wider">OtakuDex</div>
     <button id="settings-button" class="action-button bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg font-semibold cursor-pointer shadow-lg transition duration-200 flex items-center gap-2">
       <i class="fa-solid fa-gear text-xl"></i> Settings
+=======
+  <title>Media Library</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    // Customize Tailwind configuration to use the desired purple accent color
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Equivalent to the previous --accent-color: #a855f7;
+            'accent-purple': '#a855f7', 
+            // Equivalent to the previous --bg-color: #0d0d0d;
+            'bg-deep': '#0d0d0d', 
+            // Equivalent to the previous --card-bg: #1a1a1a;
+            'bg-card': '#1a1a1a', 
+            // Equivalent to the previous --secondary-text: #b3b3b3;
+            'text-secondary': '#b3b3b3', 
+            // Equivalent to the previous --border-color: #333333;
+            'border-dark': '#333333', 
+          },
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    /* Custom styles for specific elements not easily handled by utility classes */
+    body {
+      /* Hide scrollbar for a cleaner look */
+      scrollbar-width: none; /* Firefox */
+    }
+    body::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Opera */
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+    
+    /* Custom background for the dropdown arrow, matching the previous SVG setup */
+    .custom-select-bg {
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        background-size: 0.65em auto;
+    }
+  </style>
+</head>
+<body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
+  
+  <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-10 border-b border-accent-purple">
+    <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">Media Catalog</div>
+    <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+      <i class="fa-solid fa-folder-open"></i> Scan Library
+>>>>>>> Stashed changes
     </button>
   </header>
 
   <div class="content-area flex-grow flex overflow-hidden">
     
+<<<<<<< Updated upstream
     <!-- Sidebar -->
     <div id="sidebar" class="sidebar w-72 bg-card-dark p-0 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg">
         <div id="show-list-title" class="sidebar-title px-6 pt-4 pb-3 text-lg font-bold text-gray-400 border-b border-border-dark mb-4 hidden">TV Shows</div>
@@ -93,18 +155,33 @@
         <div id="initial-state-message">
             <h2 class="text-purple-500 text-3xl font-bold mb-4">Welcome to OtakuDex!</h2>
             <p class="text-xl text-gray-400">Open **Settings** (gear icon) to scan your library and begin cataloging your media.</p>
+=======
+    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
+        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
+        </div>
+    
+    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
+        <div id="initial-state-message">
+            <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
+            <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
+>>>>>>> Stashed changes
         </div>
         
-        <!-- Detailed content for selected show injected here -->
-    </div>
+        </div>
 
   </div>
   
+<<<<<<< Updated upstream
   <!-- Status Bar -->
   <div id="status-container" class="status-message p-3 bg-black text-gray-400 text-center text-sm flex-shrink-0 border-t border-border-dark">
       <div class="scan-status-container flex items-center justify-center min-h-[40px]">
           <!-- Status messages and spinner injected here -->
       </div>
+=======
+  <div id="status-container" class="status-message p-3 lg:px-8 bg-black text-text-secondary text-base flex-shrink-0 border-t border-border-dark">
+      <div class="scan-status-container flex items-center justify-center min-h-10">
+          </div>
+>>>>>>> Stashed changes
   </div>
 
   <!-- SETTINGS MODAL -->
@@ -250,16 +327,29 @@
       primaryProviderGroup: document.getElementById('primary-provider-group'),
       secondaryProviderGroup: document.getElementById('secondary-provider-group'),
     };
+    
+    // Tailwind specific colors
+    const accentColor = '#a855f7';
+    const secondaryTextColor = '#b3b3b3';
 
     // --- UTILITY FUNCTIONS ---
     
     function setStatus(message, isError = false, isLoading = false) {
-        let spinner = isLoading ? '<div class="loading-spinner"></div>' : '';
-        let color = isError ? 'red' : (isLoading ? 'var(--accent-color)' : 'var(--secondary-text)');
+        let spinnerHTML = isLoading ? `
+            <div class="w-5 h-5 border-4 border-t-4 rounded-full animate-spin mr-2" 
+                 style="border-color: rgba(255, 255, 255, 0.1); border-top-color: ${accentColor};">
+            </div>` : '';
+            
+        let color = isError ? 'red' : (isLoading ? accentColor : secondaryTextColor);
         
         elements.statusContainer.innerHTML = `
+<<<<<<< Updated upstream
             <div class="scan-status-container flex items-center justify-center min-h-[40px]" style="color:${color};">
                 ${spinner} ${message}
+=======
+            <div class="scan-status-container flex items-center justify-center min-h-10" style="color:${color};">
+                ${spinnerHTML} ${message}
+>>>>>>> Stashed changes
             </div>
         `;
         // Only disable the scan button when scanning is active
@@ -366,6 +456,7 @@
         
         // 1. Update sidebar selection class (Tailwind classes)
         document.querySelectorAll('.show-list-item').forEach(el => {
+<<<<<<< Updated upstream
             el.classList.remove('bg-gray-800', 'border-purple-500', 'font-bold');
             el.classList.add('hover:bg-gray-800/50');
         });
@@ -373,6 +464,14 @@
         selectedEl.classList.add('bg-gray-800', 'border-purple-500', 'font-bold');
         selectedEl.classList.remove('hover:bg-gray-800/50');
 
+=======
+            el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
+            el.classList.add('border-transparent');
+        });
+        const selectedEl = document.getElementById(`show-${showId}`);
+        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
+        selectedEl.classList.remove('border-transparent');
+>>>>>>> Stashed changes
         
         // 2. Render the detail view for the selected show
         renderDetailView(show);
@@ -399,21 +498,38 @@
         elements.initialMessage.classList.add('hidden');
         elements.showListTitle.classList.remove('hidden');
 
+<<<<<<< Updated upstream
         let listHTML = elements.showListTitle.outerHTML; // Preserve the title element structure
+=======
+        // Use the existing element as a title and then append list items
+        let listHTML = ''; 
+>>>>>>> Stashed changes
         
         appState.shows.forEach(show => {
             // Tailwind classes applied for styling and hover effects
             listHTML += `
+<<<<<<< Updated upstream
                 <div class="show-list-item px-6 py-3 cursor-pointer text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800/50" id="show-${show.id}" data-id="${show.id}">
+=======
+                <div class="show-list-item px-6 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800" 
+                     id="show-${show.id}" 
+                     data-id="${show.id}">
+>>>>>>> Stashed changes
                     ${show.title}
                 </div>
             `;
         });
         
+<<<<<<< Updated upstream
         const listContainer = document.createElement('div');
         listContainer.innerHTML = listHTML;
         elements.sidebar.innerHTML = ''; 
         elements.sidebar.appendChild(listContainer);
+=======
+        // Injecting after the title
+        elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
+        elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
+>>>>>>> Stashed changes
         
         document.querySelectorAll('.show-list-item').forEach(el => {
             el.addEventListener('click', (e) => {
@@ -427,6 +543,7 @@
     
     function renderDetailView(show) {
         let detailHTML = `
+<<<<<<< Updated upstream
             <div class="show-header mb-8">
                 <h1 class="text-5xl font-extrabold text-white mb-2">${show.title}</h1>
                 <p class="text-gray-400 text-lg">Template Metadata: Seasons found: ${show.seasons.length}</p>
@@ -434,6 +551,15 @@
             </div>
             
             <select id="season-select" class="season-selector mb-8 p-2 bg-gray-700 border border-border-dark rounded-lg text-white appearance-none cursor-pointer">
+=======
+            <div class="show-header mb-12">
+                <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
+                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
+            </div>
+            
+            <select id="season-select" class="season-selector custom-select-bg bg-gray-700 text-white p-3 lg:px-5 border border-gray-600 rounded-lg text-xl cursor-pointer mb-8 w-full max-w-sm appearance-none">
+>>>>>>> Stashed changes
                 ${show.seasons.map((season, index) => `
                     <option value="${index}" ${index === appState.selectedSeasonIndex ? 'selected' : ''}>
                         ${season.title} (${season.episodes.length} episodes)
@@ -442,8 +568,7 @@
             </select>
             
             <div id="episode-list-container">
-                <!-- Episodes will be rendered here -->
-            </div>
+                </div>
         `;
         
         elements.detailView.innerHTML = detailHTML;
@@ -459,7 +584,11 @@
         if (initialSeason) {
             renderEpisodes(initialSeason);
         } else {
+<<<<<<< Updated upstream
             document.getElementById('episode-list-container').innerHTML = '<p class="text-gray-400">No episodes found in this season.</p>';
+=======
+            document.getElementById('episode-list-container').innerHTML = '<p class="text-text-secondary">No episodes found in this season.</p>';
+>>>>>>> Stashed changes
         }
     }
     
@@ -467,16 +596,26 @@
         const container = document.getElementById('episode-list-container');
         if (!container) return; 
 
+<<<<<<< Updated upstream
         let episodeHTML = '<div class="episode-list grid gap-6">';
+=======
+        let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
+>>>>>>> Stashed changes
         
         season.episodes.forEach((episode, index) => {
             const episodeNumber = index + 1; 
+<<<<<<< Updated upstream
+=======
+            
+            // Extract the simple filename for the status message
+>>>>>>> Stashed changes
             const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
                                    episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
                                    episode.fullPath;
 
             // Tailwind classes for the episode card structure and appearance
             episodeHTML += `
+<<<<<<< Updated upstream
                 <div class="episode-card bg-card-dark rounded-xl overflow-hidden flex shadow-xl border border-border-dark transform transition duration-200 hover:scale-[1.01] hover:shadow-purple-500/30">
                     <div class="episode-template-img">S${appState.selectedSeasonIndex + 1} E${episodeNumber}</div>
                     <div class="episode-info p-4 flex flex-col justify-between flex-grow">
@@ -486,6 +625,19 @@
                         </div>
                         <button class="action-button bg-purple-600 hover:bg-purple-500 text-white py-1 px-3 rounded-md text-sm font-medium mt-3 self-start transition duration-150 flex items-center gap-1" data-path="${episode.fullPath}">
                             <i class="fa-solid fa-play text-xs"></i> Play
+=======
+                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
+                    <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
+                        S${appState.selectedSeasonIndex + 1} E${episodeNumber}
+                    </div>
+                    <div class="episode-info p-4 flex-grow flex flex-col justify-between">
+                        <div>
+                            <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
+                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
+                        </div>
+                        <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" data-path="${episode.fullPath}">
+                            <i class="fa-solid fa-play"></i> Play
+>>>>>>> Stashed changes
                         </button>
                     </div>
                 </div>
@@ -518,6 +670,7 @@
     // --- MAIN EVENT HANDLERS ---
     
     document.addEventListener('DOMContentLoaded', () => {
+<<<<<<< Updated upstream
         // Event listeners for Settings Modal
         elements.settingsButton.addEventListener('click', () => toggleSettingsModal(true));
         elements.closeSettingsButton.addEventListener('click', () => toggleSettingsModal(false));
@@ -529,6 +682,9 @@
         });
         
         // Initial load of cached data
+=======
+        // Initial load of cached data (PouchDB)
+>>>>>>> Stashed changes
         window.api.fetchLibraryCache().then(response => {
             if (response.shows && response.shows.length > 0) {
                 appState.shows = response.shows;

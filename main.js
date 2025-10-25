@@ -1,99 +1,22 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto'); // ADDED: For guaranteed random UUID fallback
-const { initializeApp } = require('firebase/app'); 
-const { getAuth, signInWithCustomToken, signInAnonymously } = require('firebase/auth');
-const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore'); // ADDED: getDoc for loading cache
+const PouchDB = require('pouchdb'); // ADDED: PouchDB
+const crypto = require('crypto'); // Used for original random UUID fallback (now not strictly needed but kept)
 
-// --- Global Variables (MUST be set by the canvas environment) ---
+// --- PouchDB Setup ---
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-media-app-id';
+// PouchDB will store the database files in the Electron application's user data directory.
+const db = new PouchDB('media_library_cache');
+const CACHE_DOC_ID = 'user_library_data'; // Single document ID for the library cache
 
-// Provide a structural fallback config to avoid 'projectId not provided' error 
-const defaultFirebaseConfig = {
-    apiKey: "DUMMY_API_KEY",
-    authDomain: "DUMMY_AUTH_DOMAIN",
-    projectId: "DUMMY-PROJECT-ID",
-    storageBucket: "DUMMY_STORAGE_BUCKET",
-    messagingSenderId: "DUMMY_SENDER_ID",
-    appId: "DUMMY_APP_ID"
-};
+console.log('[POUCHDB] Database initialized in:', app.getPath('userData'));
 
-let firebaseConfig;
-try {
-    firebaseConfig = (typeof __firebase_config !== 'undefined' && __firebase_config)
-        ? JSON.parse(__firebase_config)
-        : defaultFirebaseConfig;
-} catch (e) {
-    console.error("Error parsing __firebase_config (malformed JSON), using default structure.", e);
-    firebaseConfig = defaultFirebaseConfig;
-}
+// The original Firebase auth/user ID logic is completely removed as PouchDB is local.
+// However, the original structure used a user ID to namespace data (which isn't needed for local PouchDB).
+// Since the frontend structure is independent of the DB, we can simplify and proceed.
 
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-// ----------------------------------------------------------------
-
-let db;
-let auth;
-let userId;
-
-// Promise logic to track when Firebase authentication has completed its initial check
-let authPromiseResolve;
-const authReadyPromise = new Promise(resolve => {
-    authPromiseResolve = resolve;
-});
-
-function initializeFirebase() {
-    try {
-        console.log('Firebase Config used in Main Process:', firebaseConfig);
-
-        const firebaseApp = initializeApp(firebaseConfig);
-        db = getFirestore(firebaseApp);
-        auth = getAuth(firebaseApp);
-        
-        // Initial Authentication
-        auth.onAuthStateChanged(async (user) => {
-            if (user) {
-                // SUCCESS PATH
-                userId = user.uid;
-                console.log('Firebase initialized. User ID:', userId);
-            } else {
-                try {
-                    // ATTEMPT SIGN-IN
-                    if (initialAuthToken) {
-                        const userCredential = await signInWithCustomToken(auth, initialAuthToken);
-                        userId = userCredential.user.uid;
-                    } else {
-                        const anonUser = await signInAnonymously(auth);
-                        userId = anonUser.user.uid;
-                    }
-                } catch (error) {
-                    // FAILURE PATH (Expected with dummy config)
-                    console.error('Firebase Auth Error (Expected with dummy config):', error.message);
-                }
-            }
-            
-            // GUARANTEE USER ID: If all auth attempts failed, assign a random UUID
-            if (!userId) {
-                userId = crypto.randomUUID();
-                console.warn('Authentication failed; using randomly generated User ID:', userId);
-            }
-            
-            authPromiseResolve(true); // Signal completion
-        });
-
-    } catch (error) {
-        console.error('Failed to initialize Firebase in main process:', error);
-        
-        // GUARANTEE USER ID on init failure too
-        if (!userId) {
-            userId = crypto.randomUUID();
-        }
-        authPromiseResolve(false); // Signal completion with failure
-    }
-}
-
-// --- Library Scanning Logic ---
+// --- Library Scanning Logic (Unchanged) ---
 
 // Defines the video file extensions to look for
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.mov', '.flv'];
@@ -121,8 +44,9 @@ function scanDirectory(rootPath) {
 
     for (const showDir of showDirectories) {
         const showPath = path.join(rootPath, showDir.name);
+        // Use a consistent ID generation for show identification
         const show = {
-            id: showDir.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            id: showDir.name.toLowerCase().replace(/[^a-z0-9]/g, '-'), 
             title: showDir.name,
             rootPath: showPath,
             seasons: []
@@ -189,37 +113,26 @@ function createWindow() {
 
     // --- IPC Handlers ---
 
-    // 0. Fetch initial library cache (Renderer -> Main -> Firestore)
+    // 0. Fetch initial library cache (Renderer -> Main -> PouchDB)
     ipcMain.handle('fetch-library-cache', async () => {
-        await authReadyPromise; // Wait for the ID to be guaranteed
-        
-        if (!db || !userId) {
-            return { shows: [], message: 'Database/Auth not available.' };
-        }
-        
-        // NEW CHECK: Skip fetching if in dummy mode
-        if (firebaseConfig.projectId === defaultFirebaseConfig.projectId) {
-            console.warn('[DUMMY MODE]: Skipping Firestore read to avoid permission errors.');
-            return { shows: [], message: 'Dummy mode: No cache loaded.' };
-        }
-
         try {
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'library_data', 'library_cache');
-            const docSnap = await getDoc(docRef);
+            // Get the document from PouchDB
+            const doc = await db.get(CACHE_DOC_ID);
 
-            if (docSnap.exists()) {
-                console.log('Cache found.');
-                return { shows: docSnap.data().shows, message: 'Cache loaded.' };
-            } else {
-                return { shows: [], message: 'No cache found.' };
-            }
+            console.log('[POUCHDB] Cache found.');
+            return { shows: doc.shows, message: 'Cache loaded from PouchDB.' };
         } catch (error) {
-            console.error('Error fetching cache:', error);
-            return { shows: [], message: `Error loading cache: ${error.message}` };
+            // PouchDB throws a 'missing' error if the document isn't found
+            if (error.status === 404) {
+                console.log('[POUCHDB] No cache found (404).');
+                return { shows: [], message: 'No local PouchDB cache found.' };
+            }
+            console.error('[POUCHDB] Error fetching cache:', error);
+            return { shows: [], message: `Error loading cache from PouchDB: ${error.message}` };
         }
     });
     
-    // 1. Open Directory Dialog (Renderer -> Main)
+    // 1. Open Directory Dialog (Renderer -> Main) (Unchanged)
     ipcMain.handle('open-directory-dialog', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog(win, {
             properties: ['openDirectory'],
@@ -227,14 +140,8 @@ function createWindow() {
         return canceled ? null : filePaths[0];
     });
 
-    // 2. Scan and Cache Library (Renderer -> Main -> Firestore)
+    // 2. Scan and Cache Library (Renderer -> Main -> PouchDB)
     ipcMain.handle('scan-and-cache-library', async (event, rootPath) => {
-        // Wait for the ID to be guaranteed before checking it
-        await authReadyPromise; 
-        
-        if (!userId) {
-            return { success: false, message: 'Authentication is not ready or failed.' };
-        }
         if (!rootPath) {
             return { success: false, message: 'No path provided.' };
         }
@@ -247,32 +154,36 @@ function createWindow() {
                 return { success: false, message: libraryData.error };
             }
 
-            const cacheData = {
+            // Create the new cache data object
+            const newCacheData = {
+                _id: CACHE_DOC_ID,
                 lastScanned: Date.now(),
                 rootPath: rootPath,
                 shows: libraryData.shows
             };
             
-            // CHECK ADDED: Only attempt to save to Firestore if NOT using the dummy configuration
-            if (firebaseConfig.projectId !== defaultFirebaseConfig.projectId) {
-                // Mandatory Firestore Security Rules path: /artifacts/{appId}/users/{userId}/library_data/library_cache
-                const docRef = doc(db, 'artifacts', appId, 'users', userId, 'library_data', 'library_cache');
-                await setDoc(docRef, cacheData);
-                console.log(`Scan complete. ${libraryData.shows.length} shows cached and saved to Firestore.`);
-            } else {
-                console.warn(`[DUMMY MODE]: Skipping Firestore write to avoid permission errors. Shows available locally.`);
+            // Attempt to get the existing document to include its _rev (for update)
+            try {
+                const existingDoc = await db.get(CACHE_DOC_ID);
+                newCacheData._rev = existingDoc._rev; // Add the revision for update/overwrite
+            } catch (e) {
+                // If it doesn't exist (404), _rev remains undefined, and put will create it
             }
 
-            console.log(`Scan complete. ${libraryData.shows.length} shows found.`);
-            // Return the data regardless of whether it was saved to the cloud
+            // Save/update the document in PouchDB
+            await db.put(newCacheData);
+            
+            console.log(`[POUCHDB] Scan complete. ${libraryData.shows.length} shows found and cached locally.`);
+            
+            // Return the data
             return { success: true, shows: libraryData.shows }; 
         } catch (error) {
-            console.error('Library Scanning/Caching Error:', error);
-            return { success: false, message: `Database error (check connectivity/config): ${error.message}` };
+            console.error('[POUCHDB] Library Scanning/Caching Error:', error);
+            return { success: false, message: `PouchDB error: ${error.message}` };
         }
     });
 
-    // 3. Launch External Player (Renderer -> Main -> Shell)
+    // 3. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
     ipcMain.handle('launch-external', async (event, filePath) => {
         try {
             const result = await shell.openPath(filePath);
@@ -289,7 +200,6 @@ function createWindow() {
 // --- App Lifecycle ---
 
 app.whenReady().then(() => {
-    initializeFirebase();
     createWindow();
 
     app.on('activate', () => {
