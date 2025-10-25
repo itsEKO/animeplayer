@@ -9,7 +9,8 @@ const crypto = require('crypto');
 // PouchDB will store the database files in the Electron application's user data directory.
 const db = new PouchDB('media_library_cache');
 const CACHE_DOC_ID = 'user_library_data'; // Document ID for the library structure (shows/episodes)
-const LIBRARY_PATHS_DOC_ID = 'library_root_paths'; // NEW: Document ID for the list of root paths
+const LIBRARY_PATHS_DOC_ID = 'library_root_paths'; // Document ID for the list of root paths
+const METADATA_SETTINGS_DOC_ID = 'metadata_settings'; // NEW: Document ID for metadata configuration settings
 
 console.log('[POUCHDB] Database initialized in:', app.getPath('userData'));
 
@@ -127,7 +128,7 @@ function registerIpcHandlers() {
         return filePaths[0];
     });
     
-    // 2. NEW: Fetch saved library root paths
+    // 2. Fetch saved library root paths (Unchanged)
     ipcMain.handle('fetch-library-paths', async () => {
         try {
             const doc = await db.get(LIBRARY_PATHS_DOC_ID);
@@ -143,7 +144,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 3. NEW: Save library root paths
+    // 3. Save library root paths (Unchanged)
     ipcMain.handle('save-library-paths', async (event, paths) => {
         try {
             let doc = { _id: LIBRARY_PATHS_DOC_ID, paths: paths };
@@ -165,8 +166,75 @@ function registerIpcHandlers() {
         }
     });
 
+    // 4. NEW: Fetch saved metadata settings
+    ipcMain.handle('fetch-metadata-settings', async () => {
+        try {
+            const doc = await db.get(METADATA_SETTINGS_DOC_ID);
+            // Default structure: { providers: { anilist: { enabled: false } } }
+            return { 
+                success: true, 
+                settings: doc.settings || { 
+                    providers: { 
+                        anilist: { enabled: false } 
+                    } 
+                } 
+            }; 
+        } catch (error) {
+            if (error.status === 404) {
+                // Default settings if document is not found
+                return { success: true, settings: { providers: { anilist: { enabled: false } } } };
+            }
+            console.error('[POUCHDB] Fetch Metadata Settings Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
 
-    // 4. UPDATED: Scan ALL libraries and cache the results
+    // 5. NEW: Save metadata settings
+    ipcMain.handle('save-metadata-settings', async (event, settings) => {
+        try {
+            let doc = { _id: METADATA_SETTINGS_DOC_ID, settings: settings };
+
+            try {
+                const existingDoc = await db.get(METADATA_SETTINGS_DOC_ID);
+                doc._rev = existingDoc._rev;
+            } catch (error) {
+                // Ignore 404
+            }
+
+            await db.put(doc);
+            return { success: true };
+        } catch (error) {
+            console.error('[POUCHDB] Save Metadata Settings Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 6. NEW: Placeholder for asynchronous Anilist Metadata Fetching and Caching
+    ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
+        console.log(`[METADATA] Attempting to fetch Anilist metadata for: ${showTitle}`);
+        
+        // --- API FRIENDLY, ASYNCHRONOUS PLACEHOLDER LOGIC ---
+        // In a real application, this would involve making a GraphQL request to Anilist.
+        // We simulate success and non-blocking nature for now.
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network latency and work
+
+        // Simulate a successful result
+        const mockMetadata = {
+            anilistId: 12345,
+            description: `This is a simulated description for ${showTitle} from Anilist.`,
+            coverImage: 'placeholder_url',
+            genres: ['Action', 'Sci-Fi']
+        };
+        
+        console.log(`[METADATA] Successfully simulated fetching and caching Anilist metadata for ${showTitle}.`);
+        
+        // In a complete implementation, the results would be saved to PouchDB
+        // and merged with the show's data in the CACHE_DOC_ID.
+        
+        return { success: true, metadata: mockMetadata };
+    });
+
+    // 7. UPDATED: Scan ALL libraries and cache the results
     ipcMain.handle('scan-and-cache-library', async (event, rootPaths) => {
         try {
             if (!Array.isArray(rootPaths) || rootPaths.length === 0) {
@@ -210,7 +278,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 5. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
+    // 8. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
     ipcMain.handle('launch-external', async (event, filePath) => {
         try {
             const result = await shell.openPath(filePath);

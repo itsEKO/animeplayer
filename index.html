@@ -107,6 +107,7 @@
         <button id="close-settings-button" class="text-white hover:text-accent-purple text-xl"><i class="fa-solid fa-times"></i></button>
       </div>
 
+      <!-- Existing: Library Paths Section -->
       <h4 class="text-xl font-semibold mb-3">Media Library Folders</h4>
       <div id="library-paths-container" class="space-y-3 max-h-80 overflow-y-auto pr-2 mb-6 no-scrollbar">
         <!-- Library paths will be rendered here -->
@@ -116,8 +117,45 @@
         <i class="fa-solid fa-plus-circle mr-2"></i> Add New Library Folder
       </button>
 
+      <!-- NEW: Metadata Providers Section -->
+      <div class="mt-8">
+        <h4 class="text-xl font-semibold mb-3 border-t border-border-dark pt-6">Metadata Providers</h4>
+        <p class="text-sm text-text-secondary mb-4">Enable external services to automatically fetch show details, synopses, and images.</p>
+        
+        <div id="metadata-providers-container" class="space-y-4">
+            <!-- Anilist Provider - Expandable Design (MODIFIED) -->
+            <div id="anilist-provider-card" class="p-3 bg-bg-card rounded-lg border border-border-dark space-y-3">
+                <!-- Header Row -->
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center space-x-3">
+                        <span class="text-lg font-bold">Anilist</span>
+                        <!-- NEW: Cogwheel button -->
+                        <button id="anilist-api-settings-btn" class="text-text-secondary hover:text-accent-purple transition duration-150">
+                            <i class="fa-solid fa-cog text-sm"></i>
+                        </button>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="anilist-toggle" value="" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-purple/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent-purple"></div>
+                    </label>
+                </div>
+                <p class="text-xs text-text-secondary">Fetches detailed anime and manga metadata.</p>
+
+                <!-- NEW: API Key Input Section (Hidden by default) -->
+                <div id="anilist-api-key-section" class="pt-3 border-t border-border-dark hidden">
+                    <label for="anilist-api-key" class="block text-sm font-medium mb-2">Anilist API Key / Access Token (Optional)</label>
+                    <input type="text" id="anilist-api-key" placeholder="Enter API Key or Token" 
+                           class="w-full p-2 bg-black text-white rounded-lg border border-gray-600 focus:ring-accent-purple focus:border-accent-purple outline-none">
+                    <p class="text-xs text-text-secondary mt-1">This key is used for advanced/rate-limited features.</p>
+                </div>
+            </div>
+            <!-- Other providers can be added here -->
+        </div>
+      </div>
+
+
       <div class="mt-8 pt-4 border-t border-border-dark flex justify-end">
-         <p class="text-text-secondary text-sm">Changes are saved automatically when adding/removing.</p>
+         <p class="text-text-secondary text-sm">Library folder changes and settings are saved automatically.</p>
       </div>
     </div>
   </div>
@@ -130,7 +168,14 @@
       selectedShowId: null,
       selectedSeasonIndex: 0,
       // NEW: Array to hold the root paths
-      libraryPaths: [] 
+      libraryPaths: [],
+      // NEW: Metadata configuration state (UPDATED to include apiKey)
+      metadataSettings: {
+          providers: {
+              // Expandable structure for future providers
+              anilist: { enabled: false, apiKey: '' }
+          }
+      } 
     };
     
     const elements = {
@@ -142,12 +187,19 @@
       showListTitle: document.getElementById('show-list-title'),
       settingsButton: document.getElementById('settings-button'),
       
-      // NEW: Settings Modal Elements
+      // Settings Modal Elements
       settingsModal: document.getElementById('settings-modal'),
       closeSettingsButton: document.getElementById('close-settings-button'),
       libraryPathsContainer: document.getElementById('library-paths-container'),
       addLibraryButton: document.getElementById('add-library-button'),
-      initialScanInstruction: document.getElementById('initial-scan-instruction')
+      initialScanInstruction: document.getElementById('initial-scan-instruction'),
+      // NEW: Anilist Toggle Element
+      anilistToggle: document.getElementById('anilist-toggle'),
+      
+      // NEW ELEMENTS FOR API KEY
+      anilistApiKeySection: document.getElementById('anilist-api-key-section'),
+      anilistApiKeyInput: document.getElementById('anilist-api-key'),
+      anilistApiSettingsBtn: document.getElementById('anilist-api-settings-btn')
     };
     
     // Tailwind specific colors
@@ -292,8 +344,9 @@
     // --- SETTINGS MODAL FUNCTIONS ---
 
     function openSettingsModal() {
-        // Fetch and render the latest paths when opening
+        // Load and render paths and metadata settings before showing the modal
         fetchAndRenderPaths(); 
+        fetchAndRenderMetadataSettings(); 
         elements.settingsModal.classList.remove('hidden');
         elements.settingsModal.classList.add('flex');
     }
@@ -332,7 +385,7 @@
             const response = await window.api.saveLibraryPaths(appState.libraryPaths);
             
             if (response.success) {
-                setStatus('Library path added successfully!', false, false);
+                setStatus('Library path added successfully! Click scan to refresh.', false, false);
                 renderLibraryPaths();
                 renderShows(); // Re-render shows to update initial instruction
             } else {
@@ -364,8 +417,69 @@
             setStatus(`Error removing path: ${response.message}`, true, false);
         }
     }
+    
+    // NEW: Handler to save API Key when input changes
+    function handleApiKeyChange(e) {
+        // Save the API key to the state
+        appState.metadataSettings.providers.anilist.apiKey = e.target.value.trim();
+        saveMetadataSettings();
+    }
 
+    // NEW: Handler to toggle the visibility of the API Key input
+    function toggleApiKeySection() {
+        elements.anilistApiKeySection.classList.toggle('hidden');
+    }
 
+    // NEW: Metadata functions
+    async function saveMetadataSettings() {
+        const response = await window.api.saveMetadataSettings(appState.metadataSettings);
+        if (response.success) {
+            // We keep the status message brief to avoid flickering
+            console.log('Metadata settings saved.'); 
+        } else {
+            setStatus(`Error saving metadata settings: ${response.message}`, true, false);
+        }
+    }
+    
+    function handleAnilistToggle(e) {
+        appState.metadataSettings.providers.anilist.enabled = e.target.checked;
+        saveMetadataSettings();
+    }
+    
+    function renderMetadataSettings() {
+        // Set the state of the toggle based on appState
+        elements.anilistToggle.checked = appState.metadataSettings.providers.anilist.enabled;
+        
+        // NEW: Set the state of the API Key input
+        elements.anilistApiKeyInput.value = appState.metadataSettings.providers.anilist.apiKey || '';
+
+        // Ensure the change listener is attached only once
+        elements.anilistToggle.removeEventListener('change', handleAnilistToggle);
+        elements.anilistToggle.addEventListener('change', handleAnilistToggle);
+        
+        // NEW: API Key Input Listener
+        elements.anilistApiKeyInput.removeEventListener('input', handleApiKeyChange);
+        elements.anilistApiKeyInput.addEventListener('input', handleApiKeyChange);
+
+        // NEW: Settings Button Listener (to toggle the input section)
+        elements.anilistApiSettingsBtn.removeEventListener('click', toggleApiKeySection);
+        elements.anilistApiSettingsBtn.addEventListener('click', toggleApiKeySection);
+    }
+    
+    async function fetchAndRenderMetadataSettings() {
+        const response = await window.api.fetchMetadataSettings();
+        if (response.success) {
+            // Ensure apiKey field exists when setting state
+            if (!response.settings.providers.anilist.apiKey) {
+                 response.settings.providers.anilist.apiKey = '';
+            }
+            appState.metadataSettings = response.settings;
+            renderMetadataSettings();
+        } else {
+            console.error('Failed to fetch metadata settings:', response.message);
+        }
+    }
+    
     // The rest of the rendering functions (renderDetailView, renderEpisodes) 
     // remain the same as they only deal with the content and not the path management.
 
@@ -476,6 +590,8 @@
         
         // 1. Fetch library paths first
         await fetchAndRenderPaths();
+        // NEW: Fetch metadata settings on startup too
+        await fetchAndRenderMetadataSettings(); 
         
         // 2. Initial load of cached data (PouchDB)
         window.api.fetchLibraryCache().then(response => {
@@ -490,7 +606,7 @@
 
         // --- EVENT LISTENERS ---
 
-        // Scan Button Handler (UPDATED to use stored paths)
+        // Scan Button Handler (UPDATED to trigger metadata fetch)
         elements.scanButton.addEventListener('click', async () => {
             if (appState.libraryPaths.length === 0) {
                 setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
@@ -500,15 +616,42 @@
             setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
             
             // 2. Call the main process to scan and cache all paths
-            // IMPORTANT: Now passing the array of paths
-            const response = await window.api.scanAndCacheLibrary(appState.libraryPaths);
+            const scanResponse = await window.api.scanAndCacheLibrary(appState.libraryPaths);
             
-            if (response.success) {
-                appState.shows = response.shows;
-                setStatus(`Scan complete! Found ${response.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
+            if (scanResponse.success) {
+                appState.shows = scanResponse.shows;
+                setStatus(`Scan complete! Found ${scanResponse.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
                 renderShows(); // RENDER THE DATA
+
+                // --- NEW: Trigger Metadata Fetching after successful file scan ---
+                if (appState.metadataSettings.providers.anilist.enabled) {
+                    setStatus('Starting Anilist metadata refresh in background...', false, true);
+                    
+                    // Simple example: fetch metadata for the first show found
+                    if (appState.shows.length > 0) {
+                         const showTitle = appState.shows[0].title;
+                         // Call the new IPC handler - this is ASYNCHRONOUS
+                         window.api.fetchAndCacheAnilistMetadata(showTitle) 
+                            .then(metaResponse => {
+                                if (metaResponse.success) {
+                                     // Success status is just a short confirmation
+                                     setStatus(`Metadata for ${showTitle} updated (Simulated).`, false, false);
+                                     // After a short delay, restore the main status
+                                     setTimeout(() => setStatus('Ready.', false, false), 3000); 
+                                } else {
+                                     setStatus(`Metadata error for ${showTitle}: ${metaResponse.message}`, true, false);
+                                }
+                            })
+                            .catch(error => {
+                                setStatus(`Background metadata fetch failed: ${error.message}`, true, false);
+                            });
+                    } else {
+                         // No shows to fetch metadata for, revert status
+                         setTimeout(() => setStatus('Scan complete, but no shows found.', false, false), 2000);
+                    }
+                }
             } else {
-                setStatus(`Scan Error: ${response.message}`, true, false);
+                setStatus(`Scan Error: ${scanResponse.message}`, true, false);
             }
         });
 

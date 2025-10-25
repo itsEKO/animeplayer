@@ -8,12 +8,19 @@ contextBridge.exposeInMainWorld('api', {
 
     // Data Management
     fetchLibraryCache: () => ipcRenderer.invoke('fetch-library-cache'),
-    // scanAndCacheLibrary now expects an array of paths
+    // scanAndCacheLibrary expects an array of paths
     scanAndCacheLibrary: (rootPaths) => ipcRenderer.invoke('scan-and-cache-library', rootPaths),
     
-    // NEW: Library Path Management
+    // Library Path Management
     fetchLibraryPaths: () => ipcRenderer.invoke('fetch-library-paths'),
     saveLibraryPaths: (paths) => ipcRenderer.invoke('save-library-paths', paths),
+
+    // NEW: Metadata Settings Management
+    fetchMetadataSettings: () => ipcRenderer.invoke('fetch-metadata-settings'),
+    saveMetadataSettings: (settings) => ipcRenderer.invoke('save-metadata-settings', settings),
+    
+    // NEW: Anilist Metadata Fetching (Asynchronous background task)
+    fetchAndCacheAnilistMetadata: (showTitle) => ipcRenderer.invoke('fetch-and-cache-anilist-metadata', showTitle),
 });
 
 // Log to confirm preload script execution
