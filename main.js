@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+<<<<<<< Updated upstream
 const crypto = require('crypto'); // ADDED: For guaranteed random UUID fallback
 const { initializeApp } = require('firebase/app'); 
 const { getAuth, signInWithCustomToken, signInAnonymously } = require('firebase/auth');
@@ -9,6 +10,18 @@ const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore'); // 
 // --- Global Variables (MUST be set by the canvas environment) ---
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-media-app-id';
+=======
+const PouchDB = require('pouchdb');
+const crypto = require('crypto');
+// NEW: Explicitly use node-fetch v2 CommonJS syntax
+const fetch = require('node-fetch').default; // Fix for node-fetch import
+
+// --- PouchDB Setup ---
+const db = new PouchDB('media_library_cache');
+const CACHE_DOC_ID = 'user_library_data'; // Document ID for the library structure (shows/episodes)
+const LIBRARY_PATHS_DOC_ID = 'library_root_paths'; // Document ID for the list of root paths
+const METADATA_SETTINGS_DOC_ID = 'metadata_settings'; // Document ID for metadata configuration settings
+>>>>>>> Stashed changes
 
 // Provide a structural fallback config to avoid 'projectId not provided' error 
 const defaultFirebaseConfig = {
@@ -94,8 +107,11 @@ function initializeFirebase() {
 }
 
 // --- Library Scanning Logic ---
+<<<<<<< Updated upstream
 
 // Defines the video file extensions to look for
+=======
+>>>>>>> Stashed changes
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.mov', '.flv'];
 
 function isVideoFile(file) {
@@ -111,6 +127,7 @@ function scanDirectory(rootPath) {
     if (!fs.existsSync(rootPath)) {
         return { error: 'Path does not exist.' };
     }
+<<<<<<< Updated upstream
     
     // Structure: { shows: [ { title: 'Show', rootPath: '/path/to/show', seasons: [ { title: 'Season 01', episodes: [...] } ] } ] }
     const library = { shows: [] };
@@ -203,6 +220,216 @@ function createWindow() {
             return { shows: [], message: 'Dummy mode: No cache loaded.' };
         }
 
+=======
+
+    return shows;
+}
+
+// --- IPC HANDLERS ---
+function registerIpcHandlers() {
+    
+    // 1. NEW: Fetch library cache
+    ipcMain.handle('fetch-library-cache', async () => {
+        try {
+            const doc = await db.get(CACHE_DOC_ID);
+            return { success: true, shows: doc.shows || [], message: 'Library cache loaded.' };
+        } catch (error) {
+            if (error.status === 404) {
+                return { success: true, shows: [], message: 'No library cache found.' };
+            }
+            console.error('[POUCHDB] Fetch Library Cache Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 2. Directory Dialog (Unchanged)
+    ipcMain.handle('open-directory-dialog', async () => {
+        const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), {
+            properties: ['openDirectory']
+        });
+
+        if (canceled || filePaths.length === 0) {
+            return null;
+        }
+
+        return filePaths[0];
+    });
+    
+    // 3. Fetch saved library root paths (Unchanged)
+    ipcMain.handle('fetch-library-paths', async () => {
+        try {
+            const doc = await db.get(LIBRARY_PATHS_DOC_ID);
+            // paths: Array<string>
+            return { success: true, paths: doc.paths || [] }; 
+        } catch (error) {
+            if (error.status === 404) {
+                // If document is not found, return an empty array and success
+                return { success: true, paths: [] };
+            }
+            console.error('[POUCHDB] Fetch Library Paths Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 4. Save library root paths (Unchanged)
+    ipcMain.handle('save-library-paths', async (event, paths) => {
+        try {
+            let doc = { _id: LIBRARY_PATHS_DOC_ID, paths: paths };
+
+            try {
+                // Attempt to get the existing document to grab the revision
+                const existingDoc = await db.get(LIBRARY_PATHS_DOC_ID);
+                doc._rev = existingDoc._rev;
+            } catch (error) {
+                // If it doesn't exist (404), _rev remains undefined, and put will create it
+            }
+
+            // Save/update the document
+            await db.put(doc);
+            return { success: true };
+        } catch (error) {
+            console.error('[POUCHDB] Save Library Paths Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 5. Fetch saved metadata settings (Unchanged)
+    ipcMain.handle('fetch-metadata-settings', async () => {
+        try {
+            const doc = await db.get(METADATA_SETTINGS_DOC_ID);
+            // Default structure: { providers: { anilist: { enabled: false } } }
+            return { 
+                success: true, 
+                settings: doc.settings || { 
+                    providers: { 
+                        anilist: { enabled: false } 
+                    } 
+                } 
+            }; 
+        } catch (error) {
+            if (error.status === 404) {
+                // Default settings if document is not found
+                return { success: true, settings: { providers: { anilist: { enabled: false } } } };
+            }
+            console.error('[POUCHDB] Fetch Metadata Settings Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 6. Save metadata settings (Unchanged)
+    ipcMain.handle('save-metadata-settings', async (event, settings) => {
+        try {
+            let doc = { _id: METADATA_SETTINGS_DOC_ID, settings: settings };
+
+            try {
+                const existingDoc = await db.get(METADATA_SETTINGS_DOC_ID);
+                doc._rev = existingDoc._rev;
+            } catch (error) {
+                // Ignore 404
+            }
+
+            await db.put(doc);
+            return { success: true };
+        } catch (error) {
+            console.error('[POUCHDB] Save Metadata Settings Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 7. Anilist Metadata Fetching and Caching
+    ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
+        console.log(`[METADATA] Fetching Anilist metadata for: ${showTitle}`);
+
+        try {
+            // Anilist GraphQL query
+            const query = `
+                query ($search: String) {
+                    Media(search: $search, type: ANIME) {
+                        id
+                        title { romaji english }
+                        description
+                        coverImage { large }
+                        genres
+                    }
+                }
+            `;
+            const variables = { search: showTitle };
+
+            // Fetch metadata from Anilist API
+            const response = await fetch('https://graphql.anilist.co', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ query, variables })
+            });
+
+            const result = await response.json();
+            if (result.errors) {
+                console.error('[METADATA] Anilist API errors:', result.errors);
+                return { success: false, message: `Anilist API error: ${result.errors[0].message}` };
+            }
+
+            const media = result.data.Media;
+            if (!media) {
+                console.warn(`[METADATA] No matching media found for: ${showTitle}`);
+                return { success: false, message: `No matching media found for ${showTitle}` };
+            }
+
+            // Structure metadata to match your app's needs
+            const metadata = {
+                anilistId: media.id,
+                title: media.title.english || media.title.romaji || showTitle,
+                description: media.description || 'No description available.',
+                coverImage: media.coverImage?.large || 'placeholder_url',
+                genres: media.genres || []
+            };
+
+            // Fetch existing library cache to update metadata
+            let libraryData;
+            try {
+                libraryData = await db.get(CACHE_DOC_ID);
+            } catch (error) {
+                if (error.status !== 404) {
+                    console.error('[POUCHDB] Error fetching library cache:', error);
+                    return { success: false, message: `Failed to access cache: ${error.message}` };
+                }
+                libraryData = { _id: CACHE_DOC_ID, shows: [], timestamp: new Date().toISOString() };
+            }
+
+            // Update the show in the cache with the new metadata
+            const showIndex = libraryData.shows.findIndex(show => show.title.toLowerCase() === showTitle.toLowerCase());
+            if (showIndex !== -1) {
+                libraryData.shows[showIndex] = {
+                    ...libraryData.shows[showIndex],
+                    metadata: {
+                        anilist: metadata
+                    }
+                };
+
+                // Save updated cache
+                try {
+                    await db.put(libraryData);
+                    console.log(`[METADATA] Successfully cached Anilist metadata for ${showTitle}`);
+                    return { success: true, metadata };
+                } catch (error) {
+                    console.error('[POUCHDB] Error saving updated cache:', error);
+                    return { success: false, message: `Failed to save metadata: ${error.message}` };
+                }
+            } else {
+                console.warn(`[METADATA] Show ${showTitle} not found in cache`);
+                return { success: false, message: `Show ${showTitle} not found in cache` };
+            }
+        } catch (error) {
+            console.error('[METADATA] Fetch error:', error);
+            return { success: false, message: `Failed to fetch metadata: ${error.message}` };
+        }
+    });
+
+    // 8. Scan ALL libraries and cache the results (Unchanged)
+    ipcMain.handle('scan-and-cache-library', async (event, rootPaths) => {
+>>>>>>> Stashed changes
         try {
             const docRef = doc(db, 'artifacts', appId, 'users', userId, 'library_data', 'library_cache');
             const docSnap = await getDoc(docRef);
@@ -272,7 +499,11 @@ function createWindow() {
         }
     });
 
+<<<<<<< Updated upstream
     // 3. Launch External Player (Renderer -> Main -> Shell)
+=======
+    // 9. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
+>>>>>>> Stashed changes
     ipcMain.handle('launch-external', async (event, filePath) => {
         try {
             const result = await shell.openPath(filePath);
@@ -286,8 +517,29 @@ function createWindow() {
     });
 }
 
-// --- App Lifecycle ---
+<<<<<<< Updated upstream
+=======
+// --- Window Creation ---
+function createWindow() {
+    const win = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        minWidth: 800,
+        minHeight: 600,
+        frame: true,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false
+        }
+    });
 
+    win.loadFile('index.html');
+    // win.webContents.openDevTools(); // Uncomment for debugging
+}
+
+>>>>>>> Stashed changes
+// --- App Lifecycle ---
 app.whenReady().then(() => {
     initializeFirebase();
     createWindow();

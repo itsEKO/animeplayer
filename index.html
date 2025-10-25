@@ -543,6 +543,7 @@
         elements.settingsScanButton.addEventListener('click', async () => {
             console.log('SCAN BUTTON CLICKED. Starting library scan...');
 
+<<<<<<< Updated upstream
             // The mock check is now done at the top of the script, but we keep this log for user clarity
             if (typeof window.api === 'undefined' || typeof window.api.openDirectoryDialog !== 'function') {
                 setStatus('Error: IPC Bridge not found (Check preload script and main.js config).', true, false);
@@ -559,6 +560,50 @@
                 if (!rootPath) {
                     setStatus('Scan canceled by user.', false, false);
                     return;
+=======
+        // Scan Button Handler (UPDATED to trigger metadata fetch for all shows)
+        elements.scanButton.addEventListener('click', async () => {
+            if (appState.libraryPaths.length === 0) {
+                setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
+                return;
+            }
+            
+            setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
+            
+            // Call the main process to scan and cache all paths
+            const scanResponse = await window.api.scanAndCacheLibrary(appState.libraryPaths);
+            
+            if (scanResponse.success) {
+                appState.shows = scanResponse.shows;
+                setStatus(`Scan complete! Found ${scanResponse.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
+                renderShows(); // RENDER THE DATA
+
+                // --- NEW: Trigger Metadata Fetching for all shows after successful file scan ---
+                if (appState.metadataSettings.providers.anilist.enabled) {
+                    setStatus('Starting Anilist metadata refresh for all shows in background...', false, true);
+                    
+                    if (appState.shows.length > 0) {
+                        // Sequentially fetch metadata for each show to avoid overwhelming the API
+                        for (const show of appState.shows) {
+                            setStatus(`Fetching metadata for ${show.title}...`, false, true);
+                            try {
+                                const metaResponse = await window.api.fetchAndCacheAnilistMetadata(show.title);
+                                if (metaResponse.success) {
+                                    setStatus(`Metadata for ${show.title} updated.`, false, false);
+                                } else {
+                                    setStatus(`Metadata error for ${show.title}: ${metaResponse.message}`, true, false);
+                                }
+                            } catch (error) {
+                                setStatus(`Metadata fetch failed for ${show.title}: ${error.message}`, true, false);
+                            }
+                            // Brief delay to respect Anilist rate limits (90 requests/minute)
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                        setStatus('Metadata refresh complete for all shows.', false, false);
+                    } else {
+                        setStatus('Scan complete, but no shows found.', false, false);
+                    }
+>>>>>>> Stashed changes
                 }
                 
                 // Close settings modal immediately before starting the long scan operation
