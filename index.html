@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   <title>OtakuDex</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -165,12 +166,86 @@
             <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
             <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
 >>>>>>> Stashed changes
+=======
+  <title>Media Library</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <script>
+    // Customize Tailwind configuration to use the desired purple accent color
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Equivalent to the previous --accent-color: #a855f7;
+            'accent-purple': '#a855f7', 
+            // Equivalent to the previous --bg-color: #0d0d0d;
+            'bg-deep': '#0d0d0d', 
+            // Equivalent to the previous --card-bg: #1a1a1a;
+            'bg-card': '#1a1a1a', 
+            // Equivalent to the previous --secondary-text: #b3b3b3;
+            'text-secondary': '#b3b3b3', 
+            // Equivalent to the previous --border-color: #333333;
+            'border-dark': '#333333', 
+          },
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    /* Custom styles for specific elements not easily handled by utility classes */
+    body {
+      /* Hide scrollbar for a cleaner look */
+      scrollbar-width: none; /* Firefox */
+    }
+    body::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Opera */
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+    
+    /* Custom background for the dropdown arrow, matching the previous SVG setup */
+    .custom-select-bg {
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath d='M9.293 12.95l.707.707L15 9.293l-1.414-1.414L10 10.586l-3.586-3.586L5 9.293l4.293 3.657z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        background-size: 0.65em auto;
+    }
+  </style>
+</head>
+<body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
+  
+  <div class="header p-4 lg:px-8 bg-black shadow-lg flex justify-between items-center flex-shrink-0 z-10 border-b border-accent-purple">
+    <div class="header-title text-2xl lg:text-3xl font-extrabold text-accent-purple tracking-wide">Media Catalog</div>
+    <button id="scan-button" class="scan-button bg-accent-purple text-white px-6 py-3 rounded-lg font-semibold shadow-md transition duration-200 hover:bg-purple-400 hover:shadow-xl transform hover:-translate-y-0.5 disabled:bg-border-dark disabled:text-text-secondary disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none">
+      <i class="fa-solid fa-folder-open"></i> Scan Library
+    </button>
+  </div>
+
+  <div class="content-area flex-grow flex overflow-hidden">
+    
+    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
+        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
+        </div>
+    
+    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
+        <div id="initial-state-message">
+            <h2 class="text-3xl font-bold text-accent-purple">Welcome!</h2>
+            <p class="text-xl text-text-secondary mt-2">Click "**Scan Library**" above to select your root media folder and populate your catalog.</p>
+>>>>>>> Stashed changes
         </div>
         
         </div>
 
   </div>
   
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
   <!-- Status Bar -->
   <div id="status-container" class="status-message p-3 bg-black text-gray-400 text-center text-sm flex-shrink-0 border-t border-border-dark">
@@ -222,6 +297,11 @@
             </div>
         </div>
     </div>
+=======
+  <div id="status-container" class="status-message p-3 lg:px-8 bg-black text-text-secondary text-base flex-shrink-0 border-t border-border-dark">
+      <div class="scan-status-container flex items-center justify-center min-h-10">
+          </div>
+>>>>>>> Stashed changes
   </div>
 
   <script>
@@ -344,8 +424,13 @@
         
         elements.statusContainer.innerHTML = `
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             <div class="scan-status-container flex items-center justify-center min-h-[40px]" style="color:${color};">
                 ${spinner} ${message}
+=======
+            <div class="scan-status-container flex items-center justify-center min-h-10" style="color:${color};">
+                ${spinnerHTML} ${message}
+>>>>>>> Stashed changes
 =======
             <div class="scan-status-container flex items-center justify-center min-h-10" style="color:${color};">
                 ${spinnerHTML} ${message}
@@ -457,6 +542,7 @@
         // 1. Update sidebar selection class (Tailwind classes)
         document.querySelectorAll('.show-list-item').forEach(el => {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             el.classList.remove('bg-gray-800', 'border-purple-500', 'font-bold');
             el.classList.add('hover:bg-gray-800/50');
         });
@@ -464,6 +550,14 @@
         selectedEl.classList.add('bg-gray-800', 'border-purple-500', 'font-bold');
         selectedEl.classList.remove('hover:bg-gray-800/50');
 
+=======
+            el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
+            el.classList.add('border-transparent');
+        });
+        const selectedEl = document.getElementById(`show-${showId}`);
+        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
+        selectedEl.classList.remove('border-transparent');
+>>>>>>> Stashed changes
 =======
             el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
             el.classList.add('border-transparent');
@@ -499,7 +593,12 @@
         elements.showListTitle.classList.remove('hidden');
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         let listHTML = elements.showListTitle.outerHTML; // Preserve the title element structure
+=======
+        // Use the existing element as a title and then append list items
+        let listHTML = ''; 
+>>>>>>> Stashed changes
 =======
         // Use the existing element as a title and then append list items
         let listHTML = ''; 
@@ -509,7 +608,13 @@
             // Tailwind classes applied for styling and hover effects
             listHTML += `
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                 <div class="show-list-item px-6 py-3 cursor-pointer text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800/50" id="show-${show.id}" data-id="${show.id}">
+=======
+                <div class="show-list-item px-6 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800" 
+                     id="show-${show.id}" 
+                     data-id="${show.id}">
+>>>>>>> Stashed changes
 =======
                 <div class="show-list-item px-6 py-3 cursor-pointer font-medium text-base border-l-4 border-transparent transition duration-150 hover:bg-gray-800" 
                      id="show-${show.id}" 
@@ -521,10 +626,16 @@
         });
         
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         const listContainer = document.createElement('div');
         listContainer.innerHTML = listHTML;
         elements.sidebar.innerHTML = ''; 
         elements.sidebar.appendChild(listContainer);
+=======
+        // Injecting after the title
+        elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
+        elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
+>>>>>>> Stashed changes
 =======
         // Injecting after the title
         elements.sidebar.querySelector('.sidebar-title').classList.remove('hidden');
@@ -544,6 +655,7 @@
     function renderDetailView(show) {
         let detailHTML = `
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             <div class="show-header mb-8">
                 <h1 class="text-5xl font-extrabold text-white mb-2">${show.title}</h1>
                 <p class="text-gray-400 text-lg">Template Metadata: Seasons found: ${show.seasons.length}</p>
@@ -551,6 +663,15 @@
             </div>
             
             <select id="season-select" class="season-selector mb-8 p-2 bg-gray-700 border border-border-dark rounded-lg text-white appearance-none cursor-pointer">
+=======
+            <div class="show-header mb-12">
+                <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
+                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
+            </div>
+            
+            <select id="season-select" class="season-selector custom-select-bg bg-gray-700 text-white p-3 lg:px-5 border border-gray-600 rounded-lg text-xl cursor-pointer mb-8 w-full max-w-sm appearance-none">
+>>>>>>> Stashed changes
 =======
             <div class="show-header mb-12">
                 <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
@@ -585,7 +706,11 @@
             renderEpisodes(initialSeason);
         } else {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             document.getElementById('episode-list-container').innerHTML = '<p class="text-gray-400">No episodes found in this season.</p>';
+=======
+            document.getElementById('episode-list-container').innerHTML = '<p class="text-text-secondary">No episodes found in this season.</p>';
+>>>>>>> Stashed changes
 =======
             document.getElementById('episode-list-container').innerHTML = '<p class="text-text-secondary">No episodes found in this season.</p>';
 >>>>>>> Stashed changes
@@ -597,7 +722,11 @@
         if (!container) return; 
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         let episodeHTML = '<div class="episode-list grid gap-6">';
+=======
+        let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
+>>>>>>> Stashed changes
 =======
         let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
 >>>>>>> Stashed changes
@@ -608,6 +737,9 @@
 =======
             
             // Extract the simple filename for the status message
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
                                    episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
@@ -615,6 +747,7 @@
 
             // Tailwind classes for the episode card structure and appearance
             episodeHTML += `
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
                 <div class="episode-card bg-card-dark rounded-xl overflow-hidden flex shadow-xl border border-border-dark transform transition duration-200 hover:scale-[1.01] hover:shadow-purple-500/30">
                     <div class="episode-template-img">S${appState.selectedSeasonIndex + 1} E${episodeNumber}</div>
@@ -635,6 +768,17 @@
                             <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
                             <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
                         </div>
+=======
+                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
+                    <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
+                        S${appState.selectedSeasonIndex + 1} E${episodeNumber}
+                    </div>
+                    <div class="episode-info p-4 flex-grow flex flex-col justify-between">
+                        <div>
+                            <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
+                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
+                        </div>
+>>>>>>> Stashed changes
                         <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" data-path="${episode.fullPath}">
                             <i class="fa-solid fa-play"></i> Play
 >>>>>>> Stashed changes
@@ -671,6 +815,7 @@
     
     document.addEventListener('DOMContentLoaded', () => {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         // Event listeners for Settings Modal
         elements.settingsButton.addEventListener('click', () => toggleSettingsModal(true));
         elements.closeSettingsButton.addEventListener('click', () => toggleSettingsModal(false));
@@ -682,6 +827,9 @@
         });
         
         // Initial load of cached data
+=======
+        // Initial load of cached data (PouchDB)
+>>>>>>> Stashed changes
 =======
         // Initial load of cached data (PouchDB)
 >>>>>>> Stashed changes
