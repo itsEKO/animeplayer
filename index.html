@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
+  <link href="https://vjs.zencdn.net/8.6.1/video-js.css" rel="stylesheet" /> 
+  
   <script>
     // Customize Tailwind configuration to use the desired purple accent color
     tailwind.config = {
@@ -101,7 +103,7 @@
             </button>
         </div>
         
-        <video id="otaku-video-player" class="w-full h-full object-contain" controls autoplay></video>
+        <video id="otaku-video-player" class="video-js vjs-default-skin vjs-big-play-centered w-full h-full object-contain" controls></video>
     </div>
 
   </div>
@@ -163,6 +165,7 @@
     </div>
   </div>
 
+  <script src="https://vjs.zencdn.net/8.6.1/video.min.js"></script>
 
   <script>
     // --- APP STATE AND INITIALIZATION ---
@@ -186,6 +189,9 @@
           fullPath: null
       }
     };
+    
+    // MINIMAL CHANGE: Global variable to hold the Video.js instance
+    let playerInstance = null;
     
     const elements = {
       sidebar: document.getElementById('sidebar'),
@@ -299,12 +305,17 @@
     // Saves the playback progress via IPC
     async function saveProgress(isFinished = false) {
         const { showId, episodeId } = appState.currentPlaying;
-        const video = elements.videoPlayer;
+        // MINIMAL CHANGE: Use the Video.js instance
+        const video = playerInstance; 
 
-        if (!showId || !episodeId || video.readyState < 2) return; // ReadyState 2 is HAVE_CURRENT_DATA
+        // MINIMAL CHANGE: Use null check for player instance
+        if (!showId || !episodeId || !video) return; 
 
-        const currentTime = video.currentTime;
-        const duration = video.duration || 0;
+        // MINIMAL CHANGE: Use Video.js methods
+        const currentTime = video.currentTime(); 
+        const duration = video.duration() || 0; 
+        
+        if (duration === 0) return; // Wait until duration is available
 
         // If this is not a final save, only save if enough time has passed
         if (!isFinished) {
@@ -330,7 +341,8 @@
             if (episode) {
                 episode.currentTime = currentTime;
                 episode.duration = duration;
-                if (isFinished || (duration > 0 && currentTime >= duration - 5)) {
+                // MINIMAL CHANGE: Increased threshold for 'watched' check
+                if (isFinished || (duration > 0 && currentTime >= duration * 0.95)) {
                     episode.isWatched = true;
                 } else if (currentTime > 60) {
                     episode.isWatched = false;
@@ -344,66 +356,90 @@
     }
 
     function setupPlayerListeners() {
-        const video = elements.videoPlayer;
+        // MINIMAL CHANGE: Use the Video.js instance
+        if (!playerInstance) return;
+        
+        // Remove existing listeners before adding new ones
+        playerInstance.off('timeupdate', saveProgress);
+        playerInstance.off('ended', handlePlaybackEnded); // Changed from 'ended' listener to dedicated function
+        playerInstance.off('pause', saveProgress);
+        playerInstance.off('loadedmetadata', setInitialTime);
         
         // --- Key Playback Events for Tracking ---
         
         // 1. Time Update (main progress saving)
-        video.removeEventListener('timeupdate', saveProgress);
-        video.addEventListener('timeupdate', () => saveProgress(false));
+        playerInstance.on('timeupdate', () => saveProgress(false));
 
         // 2. End of Playback (mark as watched)
-        video.removeEventListener('ended', saveProgress);
-        video.addEventListener('ended', () => {
-            saveProgress(true); // Save and mark as finished
-            closePlayerView(); // Close the player automatically
-            renderEpisodes(appState.shows.find(s => s.id === appState.selectedShowId).seasons[appState.selectedSeasonIndex]); // Re-render episode list to show status change
-        });
+        playerInstance.on('ended', handlePlaybackEnded);
 
         // 3. Pause (checkpoint save)
-        video.removeEventListener('pause', saveProgress);
-        video.addEventListener('pause', () => saveProgress(false));
+        playerInstance.on('pause', () => saveProgress(false));
 
         // 4. Metadata loaded (get duration and set initial time)
-        video.removeEventListener('loadedmetadata', setInitialTime);
-        video.addEventListener('loadedmetadata', setInitialTime);
+        playerInstance.on('loadedmetadata', setInitialTime);
+    }
+    
+    // MINIMAL CHANGE: Separate function for handling end of playback
+    function handlePlaybackEnded() {
+        saveProgress(true); // Save and mark as finished
+        closePlayerView(); // Close the player automatically
+        // Re-render episode list to show status change
+        const selectedShow = appState.shows.find(s => s.id === appState.selectedShowId);
+        if (selectedShow) {
+            renderEpisodes(selectedShow.seasons[appState.selectedSeasonIndex]); 
+        }
     }
 
     function setInitialTime() {
-        const video = elements.videoPlayer;
+        // MINIMAL CHANGE: Use the Video.js instance and methods
+        const video = playerInstance; 
         const episode = findEpisodeById(appState.currentPlaying.episodeId);
 
         if (episode && episode.currentTime > 0) {
-            // Skip forward 1 second to account for video rounding/codec issues
-            video.currentTime = episode.currentTime - 1; 
+            // Set Video.js's currentTime
+            video.currentTime(episode.currentTime - 1); 
             setStatus(`Resuming playback for ${episode.title} at ${Math.floor(episode.currentTime)}s.`, false, false);
         } else {
             setStatus('Playback started.', false, false);
         }
+        
         // Ensure to save the duration to PouchDB immediately after it's loaded
         window.api.savePlaybackProgress(
             appState.currentPlaying.showId, 
             appState.currentPlaying.episodeId, 
-            video.currentTime, 
-            video.duration, 
+            video.currentTime(), // Video.js method
+            video.duration(),    // Video.js method
             false
         );
     }
     
     function openPlayerView(showId, episodeId, fullPath) {
-        const video = elements.videoPlayer;
         
         // 1. Set state
         appState.currentPlaying = { showId, episodeId, fullPath };
         
-        // 2. Set the file source
-        // NOTE: Standard HTML5 video element on Electron (Chromium) can usually load local files 
-        // directly via file:/// protocol path (e.g., file:///C:/Users/.../video.mp4).
-        // However, this approach has limitations for certain formats (MKV) and complex characters in paths.
-        // For a simple implementation, we rely on the file:/// protocol.
-        video.src = `file://${fullPath}`;
+        // MINIMAL CHANGE: Dispose of the old player instance before creating a new one
+        if (playerInstance) {
+            playerInstance.dispose(); 
+            playerInstance = null;
+        }
+
+        // --- NEW: Video.js Initialization ---
+        // The source URL is set to the file:// URI. If true FFmpeg streaming
+        // was fully implemented, this would be a local HTTP stream (e.g., http://127.0.0.1:8080/stream?file=...).
+        playerInstance = videojs(elements.videoPlayer, {
+            sources: [{
+                src: `file://${fullPath}`, 
+                type: 'video/mp4' // Best guess type
+            }],
+            autoplay: true,
+            controls: true,
+            responsive: true,
+            fluid: true
+        });
         
-        // 3. Setup listeners (will also set currentTime on loadedmetadata)
+        // 3. Setup listeners
         setupPlayerListeners(); 
 
         // 4. Toggle UI visibility
@@ -411,35 +447,37 @@
         elements.playerView.classList.remove('hidden');
         elements.playerView.classList.add('flex');
         
-        // 5. Play video
-        video.play().catch(e => {
+        // 5. Play video (Video.js handles this via the `autoplay: true` option)
+        playerInstance.play().catch(e => {
              setStatus(`Player Error: Failed to play video automatically. Try manually clicking play. (${e.message})`, true, false);
         });
     }
 
     function closePlayerView() {
-        // 1. Pause and reset player state
-        elements.videoPlayer.pause();
-        elements.videoPlayer.src = ''; 
+        if (playerInstance) {
+            // 1. Pause and save final progress
+            playerInstance.pause();
+            saveProgress(false); // Save final checkpoint
+            
+            // 2. Dispose of the player instance to clean up the DOM and memory
+            playerInstance.dispose(); 
+            playerInstance = null;
+        }
         
-        // 2. Clear tracking state
+        // 3. Clear tracking state
         appState.currentPlaying = { showId: null, episodeId: null, fullPath: null };
         
-        // 3. Toggle UI visibility
+        // 4. Toggle UI visibility
         elements.playerView.classList.add('hidden');
         elements.playerView.classList.remove('flex');
         elements.mainContent.classList.remove('hidden');
         
-        // 4. Restore status message
+        // 5. Restore status message
         setStatus('Ready.', false, false);
     }
 
     // --- RENDERING FUNCTIONS ---
     
-    // ... renderShows, renderLibraryPaths, openSettingsModal, closeSettingsModal, fetchAndRenderPaths, 
-    // addLibraryPath, removeLibraryPath, handleApiKeyChange, toggleApiKeySection, saveMetadataSettings, 
-    // handleAnilistToggle, fetchAndRenderMetadataSettings are all unchanged.
-
     // Finds the current episode object to get its tracking data
     function getEpisodeFromCurrentShow(fullPath) {
         const show = appState.shows.find(s => s.id === appState.selectedShowId);
@@ -501,18 +539,154 @@
         setSelectedShow(initialShowId);
     }
     
-    function renderLibraryPaths() { /* ... unchanged ... */ }
-    function openSettingsModal() { /* ... unchanged ... */ }
-    function closeSettingsModal() { /* ... unchanged ... */ }
-    async function fetchAndRenderPaths() { /* ... unchanged ... */ }
-    async function addLibraryPath() { /* ... unchanged ... */ }
-    async function removeLibraryPath(index) { /* ... unchanged ... */ }
-    function handleApiKeyChange(e) { /* ... unchanged ... */ }
-    function toggleApiKeySection() { /* ... unchanged ... */ }
-    async function saveMetadataSettings() { /* ... unchanged ... */ }
-    function handleAnilistToggle(e) { /* ... unchanged ... */ }
-    function renderMetadataSettings() { /* ... unchanged ... */ }
-    async function fetchAndRenderMetadataSettings() { /* ... unchanged ... */ }
+    // --- Library Path Rendering and Management (Unchanged functions) ---
+
+    function renderLibraryPaths() { 
+        elements.libraryPathsContainer.innerHTML = appState.libraryPaths.map((path, index) => `
+            <div class="path-item flex justify-between items-center p-3 bg-bg-card rounded-lg border border-border-dark">
+                <span class="text-sm font-mono text-text-secondary truncate">${path}</span>
+                <button class="remove-library-button text-red-500 hover:text-red-400 transition duration-150 ml-4" data-index="${index}">
+                    <i class="fa-solid fa-trash-alt"></i>
+                </button>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.remove-library-button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const index = parseInt(e.currentTarget.dataset.index, 10);
+                removeLibraryPath(index);
+            });
+        });
+    }
+    
+    function openSettingsModal() {
+        renderLibraryPaths();
+        renderMetadataSettings();
+        elements.settingsModal.classList.remove('hidden');
+        elements.settingsModal.classList.add('flex');
+    }
+
+    function closeSettingsModal() {
+        elements.settingsModal.classList.add('hidden');
+        elements.settingsModal.classList.remove('flex');
+        // Ensure any unsaved API key changes are saved when modal is closed
+        saveMetadataSettings();
+    }
+
+    async function fetchAndRenderPaths() {
+        try {
+            const response = await window.api.fetchLibraryPaths();
+            if (response.success) {
+                appState.libraryPaths = response.paths || [];
+            } else {
+                console.error('Failed to fetch library paths:', response.message);
+                appState.libraryPaths = [];
+            }
+        } catch (error) {
+            console.error('Error during fetchLibraryPaths:', error);
+            appState.libraryPaths = [];
+        }
+    }
+
+    async function addLibraryPath() {
+        setStatus('Opening directory chooser...', false, true);
+        const result = await window.api.openDirectoryDialog();
+        setStatus('Ready.', false, false); 
+
+        if (result && result.length > 0) {
+            const newPath = result[0];
+            if (!appState.libraryPaths.includes(newPath)) {
+                appState.libraryPaths.push(newPath);
+                await window.api.saveLibraryPaths(appState.libraryPaths);
+                renderLibraryPaths();
+                setStatus('New library path added and saved.', false, false);
+            } else {
+                setStatus('Path already exists.', true, false);
+            }
+        }
+    }
+
+    async function removeLibraryPath(index) {
+        if (index >= 0 && index < appState.libraryPaths.length) {
+            appState.libraryPaths.splice(index, 1);
+            await window.api.saveLibraryPaths(appState.libraryPaths);
+            renderLibraryPaths();
+            setStatus('Library path removed and saved.', false, false);
+        }
+    }
+    
+    // --- Metadata Provider Management (Unchanged functions) ---
+
+    function handleApiKeyChange(e) {
+        // Update state and save immediately on change
+        appState.metadataSettings.providers.anilist.apiKey = e.target.value;
+        saveMetadataSettings();
+    }
+
+    function toggleApiKeySection() {
+        const isHidden = elements.anilistApiKeySection.classList.contains('hidden');
+        if (isHidden) {
+            elements.anilistApiKeySection.classList.remove('hidden');
+            elements.anilistApiSettingsBtn.innerHTML = '<i class="fa-solid fa-eye-slash text-sm"></i>';
+        } else {
+            elements.anilistApiKeySection.classList.add('hidden');
+            elements.anilistApiSettingsBtn.innerHTML = '<i class="fa-solid fa-cog text-sm"></i>';
+        }
+    }
+
+    async function saveMetadataSettings() {
+        try {
+            await window.api.saveMetadataSettings(appState.metadataSettings);
+        } catch (error) {
+            console.error('Failed to save metadata settings:', error);
+        }
+    }
+
+    function handleAnilistToggle(e) {
+        appState.metadataSettings.providers.anilist.enabled = e.target.checked;
+        saveMetadataSettings();
+    }
+
+    function renderMetadataSettings() {
+        const anilist = appState.metadataSettings.providers.anilist;
+        
+        // Set toggle state
+        elements.anilistToggle.checked = anilist.enabled;
+        
+        // Set input value
+        elements.anilistApiKeyInput.value = anilist.apiKey;
+
+        // Ensure listeners are attached/re-attached
+        elements.anilistToggle.removeEventListener('change', handleAnilistToggle);
+        elements.anilistToggle.addEventListener('change', handleAnilistToggle);
+        
+        elements.anilistApiKeyInput.removeEventListener('input', handleApiKeyChange);
+        elements.anilistApiKeyInput.addEventListener('input', handleApiKeyChange);
+        
+        elements.anilistApiSettingsBtn.removeEventListener('click', toggleApiKeySection);
+        elements.anilistApiSettingsBtn.addEventListener('click', toggleApiKeySection);
+    }
+    
+    async function fetchAndRenderMetadataSettings() {
+        try {
+            const response = await window.api.fetchMetadataSettings();
+            if (response.success && response.settings) {
+                // Merge fetched settings with default state to handle new properties gracefully
+                appState.metadataSettings = {
+                    ...appState.metadataSettings, 
+                    providers: {
+                        ...appState.metadataSettings.providers,
+                        ...response.settings.providers
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('Error during fetchMetadataSettings:', error);
+            // Will use default settings in appState
+        }
+    }
+
+    // --- Detail View Rendering (Unchanged functions) ---
     
     function renderDetailView(show) {
         let detailHTML = `
