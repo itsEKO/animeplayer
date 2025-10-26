@@ -22,9 +22,12 @@ contextBridge.exposeInMainWorld('api', {
     // NEW: Anilist Metadata Fetching (Asynchronous background task)
     fetchAndCacheAnilistMetadata: (showTitle) => ipcRenderer.invoke('fetch-and-cache-anilist-metadata', showTitle),
     
-    // 9. NEW: Playback Progress Saving
+    // 9. Playback Progress Saving
     savePlaybackProgress: (showId, episodeId, currentTime, duration, isFinished) => 
         ipcRenderer.invoke('save-playback-progress', showId, episodeId, currentTime, duration, isFinished),
+        
+    // MINIMAL CHANGE: New handler for FFmpeg streaming
+    startFFmpegStream: (fullPath) => ipcRenderer.invoke('start-ffmpeg-stream', fullPath)
 });
 
 // Log to confirm preload script execution
