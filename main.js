@@ -324,12 +324,40 @@ function registerIpcHandlers() {
                 return { success: false, message: "No library paths provided for scanning." };
             }
             
+            // START OF MINIMAL CHANGE TO PRESERVE METADATA
+            let existingShowsMap = new Map();
+            try {
+                const existingCacheDoc = await db.get(CACHE_DOC_ID);
+                // Create a map from existing shows, using 'title' as the key for fast lookup
+                if (existingCacheDoc.shows) {
+                    existingCacheDoc.shows.forEach(show => {
+                        existingShowsMap.set(show.title, show);
+                    });
+                }
+            } catch (error) {
+                // Ignore 404. Map remains empty if no cache exists.
+            }
+            // END OF MINIMAL CHANGE
+
             let allShows = [];
             
             // Scan each root path and aggregate the results
             for (const rootPath of rootPaths) {
                 const showsFromPath = scanDirectory(rootPath);
-                allShows.push(...showsFromPath);
+                
+                // START OF MINIMAL CHANGE TO PRESERVE METADATA
+                const mergedShows = showsFromPath.map(newShow => {
+                    const existingShow = existingShowsMap.get(newShow.title);
+                    
+                    // If a cached version exists and has metadata, copy it over to the newly scanned show.
+                    if (existingShow && existingShow.anilistMetadata) {
+                        newShow.anilistMetadata = existingShow.anilistMetadata;
+                    }
+                    return newShow;
+                });
+                // END OF MINIMAL CHANGE
+                
+                allShows.push(...mergedShows);
             }
             
             const libraryData = {

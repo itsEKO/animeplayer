@@ -99,7 +99,6 @@
           </div>
   </div>
 
-  <!-- Settings Modal Structure -->
   <div id="settings-modal" class="modal-overlay fixed inset-0 hidden items-center justify-center">
     <div class="bg-bg-deep p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-border-dark transform transition-all duration-300 scale-100">
       <div class="flex justify-between items-center border-b border-border-dark pb-4 mb-6">
@@ -107,29 +106,23 @@
         <button id="close-settings-button" class="text-white hover:text-accent-purple text-xl"><i class="fa-solid fa-times"></i></button>
       </div>
 
-      <!-- Existing: Library Paths Section -->
       <h4 class="text-xl font-semibold mb-3">Media Library Folders</h4>
       <div id="library-paths-container" class="space-y-3 max-h-80 overflow-y-auto pr-2 mb-6 no-scrollbar">
-        <!-- Library paths will be rendered here -->
-      </div>
+        </div>
       
       <button id="add-library-button" class="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-semibold transition duration-200 hover:bg-green-700 shadow-md">
         <i class="fa-solid fa-plus-circle mr-2"></i> Add New Library Folder
       </button>
 
-      <!-- NEW: Metadata Providers Section -->
       <div class="mt-8">
         <h4 class="text-xl font-semibold mb-3 border-t border-border-dark pt-6">Metadata Providers</h4>
         <p class="text-sm text-text-secondary mb-4">Enable external services to automatically fetch show details, synopses, and images.</p>
         
         <div id="metadata-providers-container" class="space-y-4">
-            <!-- Anilist Provider - Expandable Design (MODIFIED) -->
             <div id="anilist-provider-card" class="p-3 bg-bg-card rounded-lg border border-border-dark space-y-3">
-                <!-- Header Row -->
                 <div class="flex justify-between items-center">
                     <div class="flex items-center space-x-3">
                         <span class="text-lg font-bold">Anilist</span>
-                        <!-- NEW: Cogwheel button -->
                         <button id="anilist-api-settings-btn" class="text-text-secondary hover:text-accent-purple transition duration-150">
                             <i class="fa-solid fa-cog text-sm"></i>
                         </button>
@@ -141,7 +134,6 @@
                 </div>
                 <p class="text-xs text-text-secondary">Fetches detailed anime and manga metadata.</p>
 
-                <!-- NEW: API Key Input Section (Hidden by default) -->
                 <div id="anilist-api-key-section" class="pt-3 border-t border-border-dark hidden">
                     <label for="anilist-api-key" class="block text-sm font-medium mb-2">Anilist API Key / Access Token (Optional)</label>
                     <input type="text" id="anilist-api-key" placeholder="Enter API Key or Token" 
@@ -149,8 +141,7 @@
                     <p class="text-xs text-text-secondary mt-1">This key is used for advanced/rate-limited features.</p>
                 </div>
             </div>
-            <!-- Other providers can be added here -->
-        </div>
+            </div>
       </div>
 
 
@@ -630,6 +621,13 @@
                     if (appState.shows.length > 0) {
                         // Sequentially fetch metadata for each show to avoid overwhelming the API
                         for (const show of appState.shows) {
+                            
+                            // MINIMAL CHANGE: Skip the API fetch and delay if metadata is already cached.
+                            if (show.anilistMetadata) {
+                                console.log(`Skipping metadata fetch for cached show: ${show.title}`);
+                                continue; // Skip to the next show in the loop
+                            }
+
                             setStatus(`Fetching metadata for ${show.title}...`, false, true);
                             try {
                                 const metaResponse = await window.api.fetchAndCacheAnilistMetadata(show.title);
