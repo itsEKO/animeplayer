@@ -197,9 +197,8 @@ function setInitialTime() {
     );
 }
 
-// 🔥 MODIFIED: Enhance openPlayerView to handle missing video element
 async function openPlayerView(showId, episodeId, fullPath) {
-    console.log('[PLAYER] openPlayerView called for:', fullPath); // 🔥 NEW: Debug log
+    console.log('[PLAYER] openPlayerView called for:', fullPath);
 
     // 1. Set state
     appState.currentPlaying = { showId, episodeId, fullPath };
@@ -207,7 +206,7 @@ async function openPlayerView(showId, episodeId, fullPath) {
     // 2. Dispose existing player to ensure clean state
     if (playerInstance) {
         try {
-            console.log('[PLAYER] Disposing existing player'); // 🔥 NEW: Debug log
+            console.log('[PLAYER] Disposing existing player');
             playerInstance.dispose();
             playerInstance = null;
         } catch (error) {
@@ -221,7 +220,6 @@ async function openPlayerView(showId, episodeId, fullPath) {
         console.warn('[PLAYER] Video element missing, recreating it');
         const playerView = document.getElementById('player-view');
         if (playerView) {
-            // 🔥 NEW: Recreate video element if missing
             videoElement = document.createElement('video');
             videoElement.id = 'otaku-video-player';
             videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
@@ -239,17 +237,72 @@ async function openPlayerView(showId, episodeId, fullPath) {
     // 4. Reset video element
     videoElement.innerHTML = ''; // Clear any existing source elements
     videoElement.removeAttribute('src'); // Remove src attribute
-    console.log('[PLAYER] Video element reset'); // 🔥 NEW: Debug log
-    
+    console.log('[PLAYER] Video element reset');
+
     // 5. Show the player view
     if (elements.playerView && elements.mainContent) {
         elements.playerView.classList.remove('hidden');
         elements.mainContent.classList.add('hidden');
-        console.log('[PLAYER] Player view shown'); // 🔥 NEW: Debug log
+        console.log('[PLAYER] Player view shown');
     } else {
         console.error('[PLAYER] Player view or main content element not found');
         setStatus('Error: UI elements not found', true, false);
         return;
+    }
+
+    // 6. Initialize Video.js player
+    try {
+        playerInstance = videojs(videoElement, {
+            controls: true,
+            autoplay: true,
+            fluid: true,
+            responsive: true,
+            preload: 'auto'
+        });
+        console.log('[PLAYER] Video.js player initialized');
+    } catch (error) {
+        console.error('[PLAYER] Error initializing Video.js player:', error);
+        setStatus('Error: Failed to initialize video player', true, false);
+        return;
+    }
+
+    // 7. Fetch streaming URL from main process
+    try {
+        setStatus('Starting video stream...', false, true);
+        const streamResponse = await window.api.startFFmpegStream(fullPath);
+        
+        if (streamResponse.success) {
+            console.log('[PLAYER] Stream URL received:', streamResponse.url);
+            
+            // 8. Set the source for the Video.js player
+            playerInstance.src({
+                src: streamResponse.url,
+                type: 'video/mp4' // Matches the Content-Type set in main.js
+            });
+
+            // 9. Setup player listeners
+            setupPlayerListeners();
+            
+            // 10. Attempt to play the video
+            playerInstance.play().catch(error => {
+                console.error('[PLAYER] Playback error:', error);
+                setStatus(`Error playing video: ${error.message}`, true, false);
+            });
+
+            setStatus('Playback started.', false, false);
+        } else {
+            console.error('[PLAYER] Failed to start stream:', streamResponse.message);
+            setStatus(`Error: ${streamResponse.message}`, true, false);
+            playerInstance.dispose();
+            playerInstance = null;
+        }
+    } catch (error) {
+        console.error('[PLAYER] Error fetching stream URL:', error);
+        setStatus(`Error: Failed to start video stream - ${error.message}`, true, false);
+        if (playerInstance) {
+            playerInstance.dispose();
+            playerInstance = null;
+        }
     }
 }
 
@@ -274,12 +327,12 @@ function closePlayerView() {
     if (videoElement) {
         videoElement.innerHTML = ''; // Clear source elements
         videoElement.removeAttribute('src'); // Remove src attribute
-        // 🔥 NEW: Remove Video.js classes to prevent conflicts
+        // Remove Video.js classes to prevent conflicts
         videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
         console.log('[PLAYER] Video element reset'); // Debug log
     } else {
         console.error('[PLAYER] Video element not found during cleanup');
-        // 🔥 NEW: Attempt to recreate video element
+        // Attempt to recreate video element
         const playerView = document.getElementById('player-view');
         if (playerView) {
             videoElement = document.createElement('video');
@@ -587,7 +640,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         setStatus('Error: Close player button not found', true, false);
     }
     
-    // 🔥 NEW: Verify video element exists at startup
+    // Verify video element exists at startup
     if (!document.getElementById('otaku-video-player')) {
         console.error('[INIT] Video element not found at startup');
         setStatus('Error: Video player element not found at startup', true, false);
