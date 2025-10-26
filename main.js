@@ -4,6 +4,20 @@ const fs = require('fs');
 const PouchDB = require('pouchdb');
 const crypto = require('crypto');
 // Removed static fetch import to avoid potential resolution issues
+const ffmpeg = require('fluent-ffmpeg'); // MINIMAL CHANGE A: Import fluent-ffmpeg
+
+// MINIMAL CHANGE B: Import ffmpeg-static and configure fluent-ffmpeg
+const ffmpegStatic = require('ffmpeg-static'); 
+ffmpeg.setFfmpegPath(ffmpegStatic); 
+
+// MINIMAL CHANGE C: Added new imports for streaming
+const http = require('http'); 
+const { parse } = require('url');
+
+// --- Global Streaming Setup ---
+const STREAMING_PORT = 8080; 
+let currentlyStreamingPath = null;
+let ffmpegProcess = null;
 
 // --- PouchDB Setup ---
 
@@ -15,7 +29,7 @@ const METADATA_SETTINGS_DOC_ID = 'metadata_settings'; // NEW: Document ID for me
 
 console.log('[POUCHDB] Database initialized in:', app.getPath('userData'));
 
-// --- Library Scanning Logic ---
+// --- Library Scanning Logic (Unchanged) ---
 
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.mov', '.flv'];
 
@@ -68,10 +82,17 @@ function scanDirectory(rootPath) {
                         const videoFiles = fs.readdirSync(seasonPath).filter(isVideoFile);
                         
                         videoFiles.forEach(videoFile => {
+                            // --- START: Added tracking fields and ID
+                            const fullPath = path.join(seasonPath, videoFile);
                             season.episodes.push({
+                                id: crypto.randomUUID(), 
                                 title: path.parse(videoFile).name,
-                                fullPath: path.join(seasonPath, videoFile)
+                                fullPath: fullPath,
+                                currentTime: 0, 
+                                duration: 0,    
+                                isWatched: false 
                             });
+                            // --- END: Added tracking fields and ID
                         });
                     } else if (showItem.isFile() && isVideoFile(showItem.name)) {
                         // Video file directly under the show folder (assume Season 1)
@@ -82,10 +103,17 @@ function scanDirectory(rootPath) {
                             seasonMap.set(seasonIndex, season);
                         }
                         
+                        // --- START: Added tracking fields and ID
+                        const fullPath = seasonPath; // seasonPath is actually the file path here
                         season.episodes.push({
+                            id: crypto.randomUUID(),
                             title: path.parse(showItem.name).name,
-                            fullPath: seasonPath // seasonPath is actually the file path here
+                            fullPath: fullPath,
+                            currentTime: 0, 
+                            duration: 0,    
+                            isWatched: false 
                         });
+                        // --- END: Added tracking fields and ID
                     }
                 });
 
@@ -110,6 +138,81 @@ function scanDirectory(rootPath) {
     }
 
     return shows;
+}
+
+// --- MINIMAL CHANGE D: FFmpeg Stream Server ---
+
+function startStreamingServer() {
+    // If a server is already running, skip starting another one
+    if (this.server) {
+        return;
+    }
+    
+    // Create the HTTP server
+    this.server = http.createServer((req, res) => {
+        const { pathname } = parse(req.url, true);
+
+        // Only handle requests to the /stream endpoint
+        if (pathname === '/stream' && currentlyStreamingPath) {
+            
+            // The process is now killed preemptively in the IPC handler.
+            // We only proceed to pipe if currentlyStreamingPath is set.
+
+            console.log(`[FFMPEG] Starting stream for: ${currentlyStreamingPath}`);
+            
+            // Set headers for video streaming
+            res.writeHead(200, {
+                'Content-Type': 'video/mp4', // Use mp4 for wide Video.js compatibility
+                'Connection': 'keep-alive',
+            });
+            
+            // 🔥 FIX: Store the fluent-ffmpeg command object in ffmpegProcess.
+            const cmd = ffmpeg(currentlyStreamingPath)
+                .videoCodec('libx264')
+                .audioCodec('aac')
+                .format('mp4')
+                .outputOptions([
+                    // Fast start for streaming
+                    '-movflags frag_keyframe+empty_moov', 
+                    // Lower CPU usage but slower speed (CRF 28 is high compression, good enough)
+                    '-crf 28', 
+                    // Preset for faster transcoding
+                    '-preset veryfast' 
+                ])
+                .on('error', (err, stdout, stderr) => {
+                    console.error('[FFMPEG ERROR]: ' + err.message);
+                    // Ensure response stream is closed on error
+                    if (!res.headersSent) {
+                       res.writeHead(500, { 'Content-Type': 'text/plain' });
+                       res.end('FFmpeg Error: ' + err.message);
+                    } else {
+                        res.end(); // If headers sent, just end the stream
+                    }
+                });
+                
+            // Assign the command object to the global variable
+            ffmpegProcess = cmd; 
+            
+            // Pipe the transcoded video directly to the HTTP response
+            cmd.pipe(res, { end: true }); 
+            
+            // 🔥 NEW: Add cleanup on client disconnect
+            res.on('close', () => {
+                console.log('[SERVER] Client disconnected, killing FFmpeg.');
+                if (ffmpegProcess) {
+                    ffmpegProcess.kill('SIGTERM'); // Use SIGTERM for graceful cleanup
+                    ffmpegProcess = null;
+                }
+                currentlyStreamingPath = null; // Reset streaming path
+            });
+                
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not Found or Stream Path not set.');
+        }
+    }).listen(STREAMING_PORT, () => {
+        console.log(`[SERVER] Streaming server listening on port ${STREAMING_PORT}`);
+    });
 }
 
 // --- IPC HANDLERS ---
@@ -167,7 +270,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 4. NEW: Fetch saved metadata settings
+    // 4. NEW: Fetch saved metadata settings (Unchanged)
     ipcMain.handle('fetch-metadata-settings', async () => {
         try {
             const doc = await db.get(METADATA_SETTINGS_DOC_ID);
@@ -190,7 +293,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 5. NEW: Save metadata settings
+    // 5. NEW: Save metadata settings (Unchanged)
     ipcMain.handle('save-metadata-settings', async (event, settings) => {
         try {
             let doc = { _id: METADATA_SETTINGS_DOC_ID, settings: settings };
@@ -210,7 +313,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 6. NEW: Fetch and cache Anilist metadata
+    // 6. NEW: Fetch and cache Anilist metadata (Unchanged)
     ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
         console.log(`[METADATA] Fetching Anilist metadata for: ${showTitle}`);
         
@@ -302,7 +405,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 7. NEW: Fetch library cache
+    // 7. NEW: Fetch library cache (Unchanged)
     ipcMain.handle('fetch-library-cache', async () => {
         try {
             const doc = await db.get(CACHE_DOC_ID);
@@ -317,14 +420,14 @@ function registerIpcHandlers() {
         }
     });
 
-    // 8. UPDATED: Scan ALL libraries and cache the results
+    // 8. UPDATED: Scan ALL libraries and cache the results (Unchanged)
     ipcMain.handle('scan-and-cache-library', async (event, rootPaths) => {
         try {
             if (!Array.isArray(rootPaths) || rootPaths.length === 0) {
                 return { success: false, message: "No library paths provided for scanning." };
             }
             
-            // START OF MINIMAL CHANGE TO PRESERVE METADATA
+            // START OF CHANGES TO PRESERVE METADATA AND TRACKING DATA
             let existingShowsMap = new Map();
             try {
                 const existingCacheDoc = await db.get(CACHE_DOC_ID);
@@ -337,7 +440,7 @@ function registerIpcHandlers() {
             } catch (error) {
                 // Ignore 404. Map remains empty if no cache exists.
             }
-            // END OF MINIMAL CHANGE
+            // END OF CHANGES
 
             let allShows = [];
             
@@ -345,17 +448,40 @@ function registerIpcHandlers() {
             for (const rootPath of rootPaths) {
                 const showsFromPath = scanDirectory(rootPath);
                 
-                // START OF MINIMAL CHANGE TO PRESERVE METADATA
+                // START OF CHANGES TO PRESERVE METADATA AND TRACKING DATA
                 const mergedShows = showsFromPath.map(newShow => {
                     const existingShow = existingShowsMap.get(newShow.title);
                     
-                    // If a cached version exists and has metadata, copy it over to the newly scanned show.
-                    if (existingShow && existingShow.anilistMetadata) {
-                        newShow.anilistMetadata = existingShow.anilistMetadata;
+                    if (existingShow) {
+                        // 1. Copy over show-level metadata
+                        if (existingShow.anilistMetadata) {
+                            newShow.anilistMetadata = existingShow.anilistMetadata;
+                        }
+                        
+                        // 2. Iterate through seasons/episodes to copy over tracking data
+                        newShow.seasons.forEach((newSeason, sIndex) => {
+                            const existingSeason = existingShow.seasons[sIndex];
+                            if (existingSeason) {
+                                newSeason.episodes.forEach(newEpisode => {
+                                    // Find the existing episode by fullPath as a reliable key
+                                    const existingEpisode = existingSeason.episodes.find(
+                                        e => e.fullPath === newEpisode.fullPath
+                                    );
+
+                                    if (existingEpisode) {
+                                        // Preserve tracking data: ID, progress, and watched status
+                                        newEpisode.id = existingEpisode.id;
+                                        newEpisode.currentTime = existingEpisode.currentTime || 0;
+                                        newEpisode.duration = existingEpisode.duration || 0;
+                                        newEpisode.isWatched = existingEpisode.isWatched || false;
+                                    }
+                                });
+                            }
+                        });
                     }
                     return newShow;
                 });
-                // END OF MINIMAL CHANGE
+                // END OF CHANGES
                 
                 allShows.push(...mergedShows);
             }
@@ -389,21 +515,90 @@ function registerIpcHandlers() {
         }
     });
 
-    // 9. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
-    ipcMain.handle('launch-external', async (event, filePath) => {
+    // 9. NEW: Save Playback Progress (Renderer -> Main -> PouchDB) (Unchanged)
+    ipcMain.handle('save-playback-progress', async (event, showId, episodeId, currentTime, duration, isFinished = false) => {
         try {
-            const result = await shell.openPath(filePath);
-            if (result.startsWith('A path could not be opened')) {
-                return { success: false, error: result };
+            let cacheDoc = await db.get(CACHE_DOC_ID);
+            let shows = cacheDoc.shows || [];
+
+            const show = shows.find(s => s.id === showId);
+
+            if (show) {
+                let episodeUpdated = false;
+                // Iterate through seasons and episodes to find the one matching the episodeId
+                for (const season of show.seasons) {
+                    const episode = season.episodes.find(e => e.id === episodeId);
+                    if (episode) {
+                        episode.currentTime = currentTime;
+                        // Only update duration if it's the first time or if a more accurate duration is received
+                        if (duration > 0) episode.duration = duration;
+
+                        // Mark as watched if the player sends the finished flag or if it's within the last 5 seconds
+                        if (isFinished || (episode.duration > 0 && currentTime >= episode.duration - 5)) {
+                            episode.isWatched = true;
+                            episode.currentTime = episode.duration; // Ensure progress is 100%
+                        } else if (currentTime > 60) {
+                            // Mark as partially watched (explicitly false for 'isWatched' if partially seen)
+                            episode.isWatched = false; 
+                        } else {
+                             // If less than 60 seconds watched, reset to unwatched state
+                            episode.isWatched = false;
+                        }
+
+                        episodeUpdated = true;
+                        break; 
+                    }
+                }
+
+                if (episodeUpdated) {
+                    await db.put(cacheDoc);
+                    return { success: true };
+                } else {
+                    return { success: false, message: `Episode with ID ${episodeId} not found.` };
+                }
+            } else {
+                return { success: false, message: `Show with ID ${showId} not found.` };
             }
-            return { success: true };
-        } catch (e) {
-            return { success: false, error: e.message };
+        } catch (error) {
+            console.error('[POUCHDB] Error saving playback progress:', error);
+            return { success: false, message: `PouchDB error: ${error.message}` };
+        }
+    });
+    
+    // MINIMAL CHANGE E: New IPC handler to start the FFmpeg process
+    ipcMain.handle('start-ffmpeg-stream', async (event, fullPath) => {
+        try {
+            if (!fs.existsSync(fullPath)) {
+                throw new Error('Video file not found at path: ' + fullPath);
+            }
+            
+            // --- 🔥 MODIFIED: Use SIGTERM instead of SIGKILL for graceful cleanup ---
+            if (ffmpegProcess) {
+                ffmpegProcess.kill('SIGTERM'); // Changed from SIGKILL to SIGTERM
+                ffmpegProcess = null; // Clear the reference before starting a new one.
+                console.log('[FFMPEG] Old process killed in IPC handler.');
+            }
+            // --- END FIX ---
+            
+            // Set the path globally for the HTTP server to pick up
+            currentlyStreamingPath = fullPath;
+            
+            // Return the URL that the Video.js player should connect to
+            const streamUrl = `http://localhost:${STREAMING_PORT}/stream`;
+            return { success: true, url: streamUrl };
+            
+        } catch (error) {
+            console.error('[FFMPEG] Failed to start stream:', error);
+            // Re-throw the error with a check in case the kill was the issue
+            if (error.message.includes('ffmpegProcess.kill')) {
+                 return { success: false, message: 'Internal Stream Error: Check console for kill process failure.' };
+            }
+            return { success: false, message: error.message };
         }
     });
 }
 
-// --- Window Creation ---
+// --- Window Creation (Unchanged) ---
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -423,9 +618,12 @@ function createWindow() {
     // win.webContents.openDevTools(); // Uncomment for debugging
 }
 
-// --- App Lifecycle ---
+// MINIMAL CHANGE F: Start the server immediately when the app launches
+startStreamingServer();
 
-app.whenReady().then(() => {
+// --- App Lifecycle (Modified to clean up FFmpeg) ---
+
+app.on('ready', () => {
     registerIpcHandlers(); // Register handlers before window creation
     createWindow();
 
@@ -437,6 +635,18 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    // MINIMAL CHANGE G: Clean up FFmpeg process and server on quit
+    if (ffmpegProcess) {
+        // Use .kill() on the fluent-ffmpeg command object
+        ffmpegProcess.kill('SIGTERM'); 
+        console.log('[FFMPEG] Process killed.');
+    }
+    if (this.server) {
+        this.server.close(() => {
+            console.log('[SERVER] Streaming server closed.');
+        });
+    }
+
     if (process.platform !== 'darwin') {
         app.quit();
     }

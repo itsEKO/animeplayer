@@ -7,6 +7,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
+  <link href="https://vjs.zencdn.net/8.5.2/video-js.css" rel="stylesheet" />
+  <script src="https://vjs.zencdn.net/8.5.2/video.min.js"></script>
+  
   <script>
     // Customize Tailwind configuration to use the desired purple accent color
     tailwind.config = {
@@ -78,19 +81,31 @@
 
   <div class="content-area flex-grow flex overflow-hidden">
     
-    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
-        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
-        </div>
-    
-    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
-        <div id="initial-state-message">
-            <h2 class="text-3xl font-bold text-accent-purple">Welcome to OtakuPlayer!</h2>
-            <p class="text-xl text-text-secondary mt-2" id="initial-scan-instruction">
-                Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".
-            </p>
+    <div id="main-content" class="flex flex-grow overflow-hidden">
+        <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
+            <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
         </div>
         
+        <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
+            <div id="initial-state-message">
+                <h2 class="text-3xl font-bold text-accent-purple">Welcome to OtakuPlayer!</h2>
+                <p class="text-xl text-text-secondary mt-2" id="initial-scan-instruction">
+                    Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".
+                </p>
+            </div>
+            
         </div>
+    </div>
+    
+    <div id="player-view" class="fixed inset-0 bg-black z-50 hidden flex-col">
+        <div class="absolute top-0 left-0 p-4 z-50">
+            <button id="close-player-button" class="text-white text-xl p-3 bg-black/50 rounded-full hover:bg-black/70 transition duration-150">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Back to Details
+            </button>
+        </div>
+        
+        <video id="otaku-video-player" class="video-js vjs-default-skin w-full h-full object-contain" controls autoplay></video>
+    </div>
 
   </div>
   
@@ -144,13 +159,11 @@
             </div>
       </div>
 
-
       <div class="mt-8 pt-4 border-t border-border-dark flex justify-end">
          <p class="text-text-secondary text-sm">Library folder changes and settings are saved automatically.</p>
       </div>
     </div>
   </div>
-
 
   <script>
     // --- APP STATE AND INITIALIZATION ---
@@ -158,44 +171,48 @@
       shows: [],
       selectedShowId: null,
       selectedSeasonIndex: 0,
-      // NEW: Array to hold the root paths
       libraryPaths: [],
-      // NEW: Metadata configuration state (UPDATED to include apiKey)
       metadataSettings: {
           providers: {
-              // Expandable structure for future providers
               anilist: { enabled: false, apiKey: '' }
           }
-      } 
+      },
+      currentPlaying: {
+          showId: null,
+          episodeId: null,
+          fullPath: null
+      }
     };
+    
+    let playerInstance = null;
     
     const elements = {
       sidebar: document.getElementById('sidebar'),
       detailView: document.getElementById('detail-view'),
+      mainContent: document.getElementById('main-content'),
       scanButton: document.getElementById('scan-button'),
       statusContainer: document.getElementById('status-container'),
       initialMessage: document.getElementById('initial-state-message'),
       showListTitle: document.getElementById('show-list-title'),
       settingsButton: document.getElementById('settings-button'),
-      
-      // Settings Modal Elements
+      playerView: document.getElementById('player-view'),
+      videoPlayer: document.getElementById('otaku-video-player'),
+      closePlayerButton: document.getElementById('close-player-button'),
       settingsModal: document.getElementById('settings-modal'),
       closeSettingsButton: document.getElementById('close-settings-button'),
       libraryPathsContainer: document.getElementById('library-paths-container'),
       addLibraryButton: document.getElementById('add-library-button'),
       initialScanInstruction: document.getElementById('initial-scan-instruction'),
-      // NEW: Anilist Toggle Element
       anilistToggle: document.getElementById('anilist-toggle'),
-      
-      // NEW ELEMENTS FOR API KEY
       anilistApiKeySection: document.getElementById('anilist-api-key-section'),
       anilistApiKeyInput: document.getElementById('anilist-api-key'),
       anilistApiSettingsBtn: document.getElementById('anilist-api-settings-btn')
     };
     
-    // Tailwind specific colors
     const accentColor = '#a855f7';
     const secondaryTextColor = '#b3b3b3';
+    const PROGRESS_SAVE_INTERVAL_SECONDS = 5; 
+    let lastTimeUpdate = 0;
 
     // --- UTILITY FUNCTIONS ---
     
@@ -213,10 +230,8 @@
             </div>
         `;
         elements.scanButton.disabled = isLoading;
-        // Disable settings button while loading/scanning
         elements.settingsButton.disabled = isLoading; 
         
-        // Disable settings controls if the modal is open
         if (!elements.settingsModal.classList.contains('hidden')) {
             elements.addLibraryButton.disabled = isLoading;
             document.querySelectorAll('.remove-library-button').forEach(btn => btn.disabled = isLoading);
@@ -228,18 +243,18 @@
         if (!show) return;
 
         appState.selectedShowId = showId;
-        appState.selectedSeasonIndex = 0; // Default to the first season
+        appState.selectedSeasonIndex = 0;
         
-        // 1. Update sidebar selection class
         document.querySelectorAll('.show-list-item').forEach(el => {
             el.classList.remove('bg-gray-700', 'font-bold', 'border-accent-purple');
             el.classList.add('border-transparent');
         });
         const selectedEl = document.getElementById(`show-${showId}`);
-        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
-        selectedEl.classList.remove('border-transparent');
+        if (selectedEl) {
+            selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
+            selectedEl.classList.remove('border-transparent');
+        }
         
-        // 2. Render the detail view for the selected show
         renderDetailView(show);
     }
     
@@ -252,17 +267,261 @@
         }
     }
 
-    // --- RENDERING FUNCTIONS ---
+    // --- PLAYER FUNCTIONS ---
+
+    function findEpisodeById(episodeId) {
+        const show = appState.shows.find(s => s.id === appState.selectedShowId);
+        if (!show) return null;
+
+        for (const season of show.seasons) {
+            const episode = season.episodes.find(e => e.id === episodeId);
+            if (episode) return episode;
+        }
+        return null;
+    }
+
+    async function saveProgress(isFinished = false) {
+        const { showId, episodeId } = appState.currentPlaying;
+        const video = playerInstance; 
+
+        if (!showId || !episodeId || !video || video.readyState() < 2) return; 
+
+        const currentTime = video.currentTime();
+        const duration = video.duration() || 0;
+
+        if (!isFinished) {
+            const now = Date.now();
+            if (now - lastTimeUpdate < PROGRESS_SAVE_INTERVAL_SECONDS * 1000) {
+                return;
+            }
+            lastTimeUpdate = now;
+        }
+        
+        const response = await window.api.savePlaybackProgress(
+            showId, 
+            episodeId, 
+            currentTime, 
+            duration, 
+            isFinished
+        );
+
+        if (response.success) {
+            const episode = findEpisodeById(episodeId);
+            if (episode) {
+                episode.currentTime = currentTime;
+                episode.duration = duration;
+                if (isFinished || (duration > 0 && currentTime >= duration * 0.95)) {
+                    episode.isWatched = true;
+                } else if (currentTime > 60) {
+                    episode.isWatched = false;
+                } else {
+                    episode.isWatched = false;
+                }
+            }
+        } else {
+            console.error('Failed to save progress:', response.message);
+        }
+    }
+
+    function setupPlayerListeners() {
+        const video = playerInstance;
+        
+        video.off('timeupdate', saveProgress);
+        video.on('timeupdate', () => saveProgress(false));
+
+        video.off('ended', saveProgress);
+        video.on('ended', () => {
+            saveProgress(true);
+            closePlayerView();
+            renderEpisodes(appState.shows.find(s => s.id === appState.selectedShowId).seasons[appState.selectedSeasonIndex]); 
+        });
+
+        video.off('pause', saveProgress);
+        video.on('pause', () => saveProgress(false));
+
+        video.off('loadedmetadata', setInitialTime);
+        video.on('loadedmetadata', setInitialTime);
+    }
+
+    function setInitialTime() {
+        const video = playerInstance;
+        const episode = findEpisodeById(appState.currentPlaying.episodeId);
+        
+        const currentTime = video.currentTime();
+        const duration = video.duration();
+
+        if (episode && episode.currentTime > 0) {
+            video.currentTime(Math.max(0, episode.currentTime - 1)); 
+            setStatus(`Resuming playback for ${episode.title} at ${Math.floor(episode.currentTime)}s.`, false, false);
+        } else {
+            setStatus('Playback started.', false, false);
+        }
+        window.api.savePlaybackProgress(
+            appState.currentPlaying.showId, 
+            appState.currentPlaying.episodeId, 
+            video.currentTime(), 
+            video.duration(), 
+            false
+        );
+    }
     
+    // 🔥 MODIFIED: Enhance openPlayerView to handle missing video element
+    async function openPlayerView(showId, episodeId, fullPath) {
+        console.log('[PLAYER] openPlayerView called for:', fullPath); // 🔥 NEW: Debug log
+
+        // 1. Set state
+        appState.currentPlaying = { showId, episodeId, fullPath };
+        
+        // 2. Dispose existing player to ensure clean state
+        if (playerInstance) {
+            try {
+                console.log('[PLAYER] Disposing existing player'); // 🔥 NEW: Debug log
+                playerInstance.dispose();
+                playerInstance = null;
+            } catch (error) {
+                console.error('[PLAYER] Error disposing player:', error);
+            }
+        }
+        
+        // 3. Ensure video element exists
+        let videoElement = document.getElementById('otaku-video-player');
+        if (!videoElement) {
+            console.warn('[PLAYER] Video element missing, recreating it');
+            const playerView = document.getElementById('player-view');
+            if (playerView) {
+                // 🔥 NEW: Recreate video element if missing
+                videoElement = document.createElement('video');
+                videoElement.id = 'otaku-video-player';
+                videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
+                videoElement.setAttribute('controls', '');
+                videoElement.setAttribute('autoplay', '');
+                playerView.appendChild(videoElement);
+                console.log('[PLAYER] Video element recreated');
+            } else {
+                console.error('[PLAYER] Player view not found, cannot recreate video element');
+                setStatus('Error: Player view not found', true, false);
+                return;
+            }
+        }
+        
+        // 4. Reset video element
+        videoElement.innerHTML = ''; // Clear any existing source elements
+        videoElement.removeAttribute('src'); // Remove src attribute
+        console.log('[PLAYER] Video element reset'); // 🔥 NEW: Debug log
+        
+        // 5. Show the player view
+        if (elements.playerView && elements.mainContent) {
+            elements.playerView.classList.remove('hidden');
+            elements.mainContent.classList.add('hidden');
+            console.log('[PLAYER] Player view shown'); // 🔥 NEW: Debug log
+        } else {
+            console.error('[PLAYER] Player view or main content element not found');
+            setStatus('Error: UI elements not found', true, false);
+            return;
+        }
+        
+        // 6. Initialize new Video.js player
+        try {
+            // Request stream URL from main process
+            const response = await window.api.startFFmpegStream(fullPath);
+            if (!response.success) {
+                setStatus(`Failed to start stream: ${response.message}`, true, false);
+                closePlayerView();
+                return;
+            }
+            
+            // Create new player instance
+            console.log('[PLAYER] Initializing Video.js player with URL:', response.url); // 🔥 NEW: Debug log
+            playerInstance = videojs('otaku-video-player', {
+                controls: true,
+                autoplay: true,
+                preload: 'auto',
+                fluid: true,
+                sources: [{
+                    src: response.url,
+                    type: 'video/mp4'
+                }]
+            });
+            
+            // Setup event listeners
+            setupPlayerListeners();
+            
+            // Update status
+            setStatus(`Streaming: ${findEpisodeById(episodeId)?.title || 'Episode'}`, false, false);
+        } catch (error) {
+            console.error('[PLAYER] Failed to initialize stream:', error);
+            setStatus(`Streaming error: ${error.message}`, true, false);
+            closePlayerView();
+        }
+    }
+
+    // 🔥 MODIFIED: Enhance closePlayerView to preserve video element
+    function closePlayerView() {
+        console.log('[PLAYER] closePlayerView called'); // Debug log
+
+        if (playerInstance) {
+            try {
+                console.log('[PLAYER] Saving progress and disposing player'); // Debug log
+                // Save progress before closing
+                saveProgress(false);
+                // Pause and dispose player
+                playerInstance.pause();
+                playerInstance.dispose();
+                playerInstance = null;
+            } catch (error) {
+                console.error('[PLAYER] Error disposing player on close:', error);
+                setStatus(`Error disposing player: ${error.message}`, true, false);
+            }
+        } else {
+            console.log('[PLAYER] No player instance to dispose'); // Debug log
+        }
+        
+        // Reset video element
+        let videoElement = document.getElementById('otaku-video-player');
+        if (videoElement) {
+            videoElement.innerHTML = ''; // Clear source elements
+            videoElement.removeAttribute('src'); // Remove src attribute
+            // 🔥 NEW: Remove Video.js classes to prevent conflicts
+            videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
+            console.log('[PLAYER] Video element reset'); // Debug log
+        } else {
+            console.error('[PLAYER] Video element not found during cleanup');
+            // 🔥 NEW: Attempt to recreate video element
+            const playerView = document.getElementById('player-view');
+            if (playerView) {
+                videoElement = document.createElement('video');
+                videoElement.id = 'otaku-video-player';
+                videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
+                videoElement.setAttribute('controls', '');
+                videoElement.setAttribute('autoplay', '');
+                playerView.appendChild(videoElement);
+                console.log('[PLAYER] Video element recreated during cleanup');
+            }
+        }
+        
+        // Update UI
+        if (elements.playerView && elements.mainContent) {
+            console.log('[PLAYER] Updating UI: hiding player, showing main content'); // Debug log
+            elements.playerView.classList.add('hidden');
+            elements.mainContent.classList.remove('hidden');
+        } else {
+            console.error('[PLAYER] Player view or main content element not found during UI update');
+            setStatus('Error: UI elements not found', true, false);
+        }
+        
+        // Reset current playing state
+        appState.currentPlaying = { showId: null, episodeId: null, fullPath: null };
+        
+        setStatus('Player closed.', false, false);
+    }
+
     function renderShows() {
         if (appState.shows.length === 0) {
-            elements.sidebar.innerHTML = elements.showListTitle.outerHTML; // Keep title element for structure
+            elements.sidebar.innerHTML = elements.showListTitle.outerHTML;
             elements.showListTitle.classList.add('hidden');
             
-            // Show initial message again if library is empty
             elements.initialMessage.classList.remove('hidden'); 
             
-            // Update instruction based on whether paths exist
             if (appState.libraryPaths.length > 0) {
                  elements.initialScanInstruction.innerHTML = 'You have set your library paths. Click "**Scan Library**" to load your collection.';
             } else {
@@ -274,7 +533,6 @@
         elements.initialMessage.classList.add('hidden');
         elements.showListTitle.classList.remove('hidden');
 
-        // Use the existing element as a title and then append list items
         let listHTML = ''; 
         
         appState.shows.forEach(show => {
@@ -287,43 +545,29 @@
             `;
         });
         
-        // Injecting after the title
         elements.sidebar.innerHTML = elements.sidebar.querySelector('.sidebar-title').outerHTML + listHTML;
         
-        // Attach click listeners to the show list items
         document.querySelectorAll('.show-list-item').forEach(el => {
             el.addEventListener('click', (e) => {
                 setSelectedShow(e.currentTarget.dataset.id);
             });
         });
 
-        // Automatically select the first show or the previously selected one
         const initialShowId = appState.selectedShowId || appState.shows[0].id;
         setSelectedShow(initialShowId);
     }
     
-    // Renders the list of library paths in the settings modal
     function renderLibraryPaths() {
-        if (appState.libraryPaths.length === 0) {
-            elements.libraryPathsContainer.innerHTML = '<p class="text-text-secondary p-2">No folders added yet. Click "Add New Library Folder".</p>';
-            return;
-        }
+        elements.libraryPathsContainer.innerHTML = appState.libraryPaths.map((path, index) => `
+            <div class="flex items-center bg-black p-3 rounded-lg border border-border-dark">
+                <span class="truncate text-sm text-text-secondary flex-grow">${path}</span>
+                <button class="remove-library-button text-red-500 hover:text-red-400 ml-4 transition duration-150" 
+                        data-index="${index}" title="Remove Folder">
+                    <i class="fa-solid fa-trash-alt"></i>
+                </button>
+            </div>
+        `).join('');
 
-        let pathsHTML = '';
-        appState.libraryPaths.forEach((path, index) => {
-            pathsHTML += `
-                <div class="flex items-center justify-between p-3 bg-bg-card rounded-lg border border-border-dark">
-                    <span class="text-sm font-mono text-text-secondary truncate pr-4" title="${path}">${path}</span>
-                    <button class="remove-library-button text-red-500 hover:text-red-400 p-1 rounded-full transition duration-150" data-index="${index}">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            `;
-        });
-        
-        elements.libraryPathsContainer.innerHTML = pathsHTML;
-
-        // Attach event listeners to remove buttons
         document.querySelectorAll('.remove-library-button').forEach(button => {
             button.addEventListener('click', (e) => {
                 const index = parseInt(e.currentTarget.dataset.index, 10);
@@ -332,14 +576,12 @@
         });
     }
 
-    // --- SETTINGS MODAL FUNCTIONS ---
-
     function openSettingsModal() {
-        // Load and render paths and metadata settings before showing the modal
-        fetchAndRenderPaths(); 
-        fetchAndRenderMetadataSettings(); 
         elements.settingsModal.classList.remove('hidden');
         elements.settingsModal.classList.add('flex');
+        
+        renderLibraryPaths();
+        renderMetadataSettings();
     }
 
     function closeSettingsModal() {
@@ -348,137 +590,111 @@
     }
 
     async function fetchAndRenderPaths() {
-        setStatus('Fetching library paths...', false, true);
         const response = await window.api.fetchLibraryPaths();
-        setStatus(response.success ? 'Ready.' : `Error fetching paths: ${response.message}`, !response.success, false);
-        
         if (response.success) {
             appState.libraryPaths = response.paths;
             renderLibraryPaths();
-            renderShows(); // Re-render shows to update initial instruction if needed
+        } else {
+            console.error('Failed to fetch library paths:', response.message);
         }
     }
-    
+
     async function addLibraryPath() {
-        setStatus('Opening directory selector...', false, true);
+        setStatus('Opening directory dialog...', false, true);
         const newPath = await window.api.openDirectoryDialog();
-
+        
         if (newPath) {
-            // Check for duplicates
-            if (appState.libraryPaths.includes(newPath)) {
-                setStatus('Path already added.', true, false);
-                return;
-            }
-
-            // Update state and save
-            appState.libraryPaths.push(newPath);
-            setStatus('Saving new path...', false, true);
-            const response = await window.api.saveLibraryPaths(appState.libraryPaths);
-            
-            if (response.success) {
-                setStatus('Library path added successfully! Click scan to refresh.', false, false);
-                renderLibraryPaths();
-                renderShows(); // Re-render shows to update initial instruction
+            if (!appState.libraryPaths.includes(newPath)) {
+                appState.libraryPaths.push(newPath);
+                
+                const response = await window.api.saveLibraryPaths(appState.libraryPaths);
+                
+                if (response.success) {
+                    renderLibraryPaths();
+                    setStatus(`Added library folder: ${newPath}`, false, false);
+                } else {
+                    setStatus(`Error saving path: ${response.message}`, true, false);
+                }
             } else {
-                // If save fails, remove the path we just added
-                appState.libraryPaths.pop(); 
-                setStatus(`Error saving path: ${response.message}`, true, false);
+                setStatus('Folder already added.', true, false);
             }
         } else {
-            setStatus('Add path canceled.', false, false);
+             setStatus('Ready.', false, false);
         }
     }
 
     async function removeLibraryPath(index) {
-        if (index < 0 || index >= appState.libraryPaths.length) return;
-
-        // Remove from state
-        const removedPath = appState.libraryPaths.splice(index, 1)[0]; 
-
-        setStatus(`Removing ${removedPath}...`, false, true);
-        const response = await window.api.saveLibraryPaths(appState.libraryPaths);
-
-        if (response.success) {
-            setStatus('Library path removed successfully. Please click "Scan Library" to update your collection.', false, false);
-            renderLibraryPaths();
-            renderShows(); // Re-render shows to update initial instruction
-        } else {
-            // If save fails, put the path back
-            appState.libraryPaths.splice(index, 0, removedPath); 
-            setStatus(`Error removing path: ${response.message}`, true, false);
+        if (index >= 0 && index < appState.libraryPaths.length) {
+            const removedPath = appState.libraryPaths.splice(index, 1)[0];
+            
+            const response = await window.api.saveLibraryPaths(appState.libraryPaths);
+            
+            if (response.success) {
+                renderLibraryPaths();
+                setStatus(`Removed library folder: ${removedPath}`, false, false);
+            } else {
+                setStatus(`Error removing path: ${response.message}`, true, false);
+            }
         }
     }
     
-    // NEW: Handler to save API Key when input changes
     function handleApiKeyChange(e) {
-        // Save the API key to the state
         appState.metadataSettings.providers.anilist.apiKey = e.target.value.trim();
         saveMetadataSettings();
     }
-
-    // NEW: Handler to toggle the visibility of the API Key input
+    
     function toggleApiKeySection() {
-        elements.anilistApiKeySection.classList.toggle('hidden');
+        const isHidden = elements.anilistApiKeySection.classList.toggle('hidden');
+        elements.anilistApiSettingsBtn.querySelector('i').classList.toggle('fa-cog', isHidden);
+        elements.anilistApiSettingsBtn.querySelector('i').classList.toggle('fa-times', !isHidden);
     }
 
-    // NEW: Metadata functions
     async function saveMetadataSettings() {
-        const response = await window.api.saveMetadataSettings(appState.metadataSettings);
-        if (response.success) {
-            // We keep the status message brief to avoid flickering
-            console.log('Metadata settings saved.'); 
-        } else {
-            setStatus(`Error saving metadata settings: ${response.message}`, true, false);
+        const settingsToSave = JSON.parse(JSON.stringify(appState.metadataSettings));
+        
+        const response = await window.api.saveMetadataSettings(settingsToSave);
+
+        if (!response.success) {
+            console.error('Failed to save metadata settings:', response.message);
         }
     }
-    
+
     function handleAnilistToggle(e) {
         appState.metadataSettings.providers.anilist.enabled = e.target.checked;
         saveMetadataSettings();
     }
     
     function renderMetadataSettings() {
-        // Set the state of the toggle based on appState
-        elements.anilistToggle.checked = appState.metadataSettings.providers.anilist.enabled;
+        const anilistSettings = appState.metadataSettings.providers.anilist;
         
-        // NEW: Set the state of the API Key input
-        elements.anilistApiKeyInput.value = appState.metadataSettings.providers.anilist.apiKey || '';
-
-        // Ensure the change listener is attached only once
+        elements.anilistToggle.checked = anilistSettings.enabled;
+        elements.anilistApiKeyInput.value = anilistSettings.apiKey;
+        
         elements.anilistToggle.removeEventListener('change', handleAnilistToggle);
         elements.anilistToggle.addEventListener('change', handleAnilistToggle);
         
-        // NEW: API Key Input Listener
         elements.anilistApiKeyInput.removeEventListener('input', handleApiKeyChange);
         elements.anilistApiKeyInput.addEventListener('input', handleApiKeyChange);
 
-        // NEW: Settings Button Listener (to toggle the input section)
         elements.anilistApiSettingsBtn.removeEventListener('click', toggleApiKeySection);
         elements.anilistApiSettingsBtn.addEventListener('click', toggleApiKeySection);
     }
-    
+
     async function fetchAndRenderMetadataSettings() {
         const response = await window.api.fetchMetadataSettings();
         if (response.success) {
-            // Ensure apiKey field exists when setting state
-            if (!response.settings.providers.anilist.apiKey) {
-                 response.settings.providers.anilist.apiKey = '';
-            }
-            appState.metadataSettings = response.settings;
+            Object.assign(appState.metadataSettings.providers.anilist, response.settings.providers.anilist);
             renderMetadataSettings();
         } else {
             console.error('Failed to fetch metadata settings:', response.message);
         }
     }
     
-    // The rest of the rendering functions (renderDetailView, renderEpisodes) 
-    // remain the same as they only deal with the content and not the path management.
-
     function renderDetailView(show) {
         let detailHTML = `
             <div class="show-header mb-12">
                 <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata.description}: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata?.description || 'No description available.'}: Seasons found: ${show.seasons.length}</p>
                 <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
             </div>
             
@@ -496,7 +712,6 @@
         
         elements.detailView.innerHTML = detailHTML;
         
-        // Attach change listener to the season selector
         const seasonSelect = document.getElementById('season-select');
         if (seasonSelect) {
             seasonSelect.addEventListener('change', (e) => {
@@ -504,7 +719,6 @@
             });
         }
         
-        // Render episodes for the initially selected season
         const initialSeason = show.seasons[appState.selectedSeasonIndex];
         if (initialSeason) {
             renderEpisodes(initialSeason);
@@ -515,30 +729,39 @@
     
     function renderEpisodes(season) {
         const container = document.getElementById('episode-list-container');
-        if (!container) return; // Guard clause if detail view hasn't been rendered yet
+        if (!container) return;
 
         let episodeHTML = '<div class="episode-list grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">';
         
         season.episodes.forEach((episode, index) => {
-            // Calculate correct episode number based on the index + 1
             const episodeNumber = index + 1; 
             
-            // Extract the simple filename for the status message
-            const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
-                                   episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
-                                   episode.fullPath;
-
+            const progress = (episode.duration > 0 && episode.currentTime > 0) 
+                             ? Math.floor((episode.currentTime / episode.duration) * 100) 
+                             : 0;
+            const progressDisplay = progress > 5 ? `${progress}%` : '';
+            const statusColor = episode.isWatched ? 'border-green-500' : 
+                                progress > 5 ? 'border-yellow-500' : 
+                                'border-border-dark';
+            
             episodeHTML += `
-                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
+                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border ${statusColor} transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
                     <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
                         S${appState.selectedSeasonIndex + 1} E${episodeNumber}
                     </div>
                     <div class="episode-info p-4 flex-grow flex flex-col justify-between">
                         <div>
                             <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
-                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
+                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">
+                                ${episode.isWatched ? '<i class="fa-solid fa-check text-green-500 mr-1"></i> Watched' : 
+                                 (progress > 5 ? `<i class="fa-solid fa-sync text-yellow-500 mr-1"></i> Progress: ${progressDisplay}` : 
+                                  '<i class="fa-solid fa-circle-notch text-text-secondary mr-1"></i> Unwatched')}
+                            </div>
                         </div>
-                        <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" data-path="${episode.fullPath}">
+                        <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" 
+                                data-fullpath="${episode.fullPath}"
+                                data-showid="${appState.selectedShowId}"
+                                data-episodeid="${episode.id}">
                             <i class="fa-solid fa-play"></i> Play
                         </button>
                     </div>
@@ -549,39 +772,37 @@
         episodeHTML += '</div>';
         container.innerHTML = episodeHTML;
         
-        // Attach click listeners to all Play buttons
         document.querySelectorAll('.play-button').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const filePath = e.currentTarget.dataset.path;
+            button.addEventListener('click', (e) => {
+                const filePath = e.currentTarget.dataset.fullpath;
+                const showId = e.currentTarget.dataset.showid;
+                const episodeId = e.currentTarget.dataset.episodeid;
                 
-                // Extract filename for better status message
-                const episodeFileName = filePath.substring(filePath.lastIndexOf('/') + 1) || 
-                                       filePath.substring(filePath.lastIndexOf('\\') + 1) || 
-                                       filePath;
-                
-                setStatus(`Launching ${episodeFileName}...`, false, true);
-                
-                // Call launchExternal
-                const response = await window.api.launchExternal(filePath);
-                
-                if (response.success) {
-                    setStatus('Launched successfully in external player.', false, false);
-                } else {
-                    setStatus(`Launch failed for ${episodeFileName}: ${response.error}`, true, false);
-                }
+                openPlayerView(showId, episodeId, filePath);
             });
         });
     }
-
 
     // --- MAIN EVENT HANDLERS ---
     
     document.addEventListener('DOMContentLoaded', async () => {
         // --- INITIAL SETUP ---
         
+        // Verify closePlayerButton exists
+        if (!elements.closePlayerButton) {
+            console.error('[INIT] Close player button not found');
+            setStatus('Error: Close player button not found', true, false);
+        }
+        
+        // 🔥 NEW: Verify video element exists at startup
+        if (!document.getElementById('otaku-video-player')) {
+            console.error('[INIT] Video element not found at startup');
+            setStatus('Error: Video player element not found at startup', true, false);
+        }
+        
         // 1. Fetch library paths first
         await fetchAndRenderPaths();
-        // NEW: Fetch metadata settings on startup too
+        // Fetch metadata settings on startup too
         await fetchAndRenderMetadataSettings(); 
         
         // 2. Initial load of cached data (PouchDB)
@@ -595,9 +816,13 @@
             }
         });
 
-        // --- EVENT LISTENERS ---
+        // --- NEW PLAYER UI LISTENERS ---
+        elements.closePlayerButton.addEventListener('click', () => {
+            console.log('[EVENT] Close player button clicked');
+            closePlayerView();
+        });
 
-        // Scan Button Handler (UPDATED to trigger metadata fetch for all shows)
+        // --- EVENT LISTENERS ---
         elements.scanButton.addEventListener('click', async () => {
             if (appState.libraryPaths.length === 0) {
                 setStatus('ERROR: Please add at least one library folder in Settings first.', true, false);
@@ -606,26 +831,21 @@
             
             setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
             
-            // Call the main process to scan and cache all paths
             const scanResponse = await window.api.scanAndCacheLibrary(appState.libraryPaths);
             
             if (scanResponse.success) {
                 appState.shows = scanResponse.shows;
                 setStatus(`Scan complete! Found ${scanResponse.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
-                renderShows(); // RENDER THE DATA
+                renderShows();
 
-                // --- NEW: Trigger Metadata Fetching for all shows after successful file scan ---
                 if (appState.metadataSettings.providers.anilist.enabled) {
                     setStatus('Starting Anilist metadata refresh for all shows in background...', false, true);
                     
                     if (appState.shows.length > 0) {
-                        // Sequentially fetch metadata for each show to avoid overwhelming the API
                         for (const show of appState.shows) {
-                            
-                            // MINIMAL CHANGE: Skip the API fetch and delay if metadata is already cached.
                             if (show.anilistMetadata) {
                                 console.log(`Skipping metadata fetch for cached show: ${show.title}`);
-                                continue; // Skip to the next show in the loop
+                                continue;
                             }
 
                             setStatus(`Fetching metadata for ${show.title}...`, false, true);
@@ -639,7 +859,6 @@
                             } catch (error) {
                                 setStatus(`Metadata fetch failed for ${show.title}: ${error.message}`, true, false);
                             }
-                            // Brief delay to respect Anilist rate limits (90 requests/minute)
                             await new Promise(resolve => setTimeout(resolve, 1000));
                         }
                         setStatus('Metadata refresh complete for all shows.', false, false);
@@ -652,19 +871,15 @@
             }
         });
 
-        // Settings Button Handler
         elements.settingsButton.addEventListener('click', openSettingsModal);
         
-        // Modal Close Handlers
         elements.closeSettingsButton.addEventListener('click', closeSettingsModal);
         elements.settingsModal.addEventListener('click', (e) => {
-            // Close if clicking the overlay but not the modal content itself
             if (e.target === elements.settingsModal) {
                 closeSettingsModal();
             }
         });
 
-        // Add New Library Button Handler
         elements.addLibraryButton.addEventListener('click', addLibraryPath);
     });
   </script>
