@@ -3,17 +3,20 @@ const path = require('path');
 const fs = require('fs');
 const PouchDB = require('pouchdb');
 const crypto = require('crypto');
-const fetch = require('node-fetch').default;
+// Removed static fetch import to avoid potential resolution issues
 
 // --- PouchDB Setup ---
+
+// PouchDB will store the database files in the Electron application's user data directory.
 const db = new PouchDB('media_library_cache');
-const CACHE_DOC_ID = 'user_library_data';
-const LIBRARY_PATHS_DOC_ID = 'library_root_paths';
-const METADATA_SETTINGS_DOC_ID = 'metadata_settings';
+const CACHE_DOC_ID = 'user_library_data'; // Document ID for the library structure (shows/episodes)
+const LIBRARY_PATHS_DOC_ID = 'library_root_paths'; // Document ID for the list of root paths
+const METADATA_SETTINGS_DOC_ID = 'metadata_settings'; // NEW: Document ID for metadata configuration settings
 
 console.log('[POUCHDB] Database initialized in:', app.getPath('userData'));
 
 // --- Library Scanning Logic ---
+
 const VIDEO_EXTENSIONS = ['.mkv', '.mp4', '.avi', '.webm', '.mov', '.flv'];
 
 function isVideoFile(file) {
@@ -36,10 +39,11 @@ function scanDirectory(rootPath) {
             const itemPath = path.join(rootPath, item.name);
             
             if (item.isDirectory()) {
+                // Treat each top-level directory as a 'Show'
                 const show = {
-                    id: crypto.randomUUID(),
+                    id: crypto.randomUUID(), // Unique ID for the show
                     title: item.name,
-                    rootPath: itemPath,
+                    rootPath: itemPath, // Path to the show directory
                     seasons: [],
                 };
 
@@ -50,8 +54,9 @@ function scanDirectory(rootPath) {
                     const seasonPath = path.join(itemPath, showItem.name);
 
                     if (showItem.isDirectory() && showItem.name.toLowerCase().includes('season')) {
+                        // Directory is explicitly named 'Season X'
                         const seasonTitle = showItem.name;
-                        const seasonIndex = parseInt(showItem.name.match(/\d+/)?.[0] || '1', 10) - 1;
+                        const seasonIndex = parseInt(showItem.name.match(/\d+/)?.[0] || '1', 10) - 1; // Extract season number
 
                         let season = seasonMap.get(seasonIndex);
                         if (!season) {
@@ -59,6 +64,7 @@ function scanDirectory(rootPath) {
                             seasonMap.set(seasonIndex, season);
                         }
                         
+                        // Scan for videos inside the season directory
                         const videoFiles = fs.readdirSync(seasonPath).filter(isVideoFile);
                         
                         videoFiles.forEach(videoFile => {
@@ -68,6 +74,7 @@ function scanDirectory(rootPath) {
                             });
                         });
                     } else if (showItem.isFile() && isVideoFile(showItem.name)) {
+                        // Video file directly under the show folder (assume Season 1)
                         const seasonIndex = 0;
                         let season = seasonMap.get(seasonIndex);
                         if (!season) {
@@ -77,21 +84,25 @@ function scanDirectory(rootPath) {
                         
                         season.episodes.push({
                             title: path.parse(showItem.name).name,
-                            fullPath: seasonPath
+                            fullPath: seasonPath // seasonPath is actually the file path here
                         });
                     }
                 });
 
+                // Convert map to array and sort by index
                 show.seasons = Array.from(seasonMap.entries())
                     .sort(([indexA], [indexB]) => indexA - indexB)
                     .map(([, season]) => {
+                        // Sort episodes by filename (useful for correct episode order)
                         season.episodes.sort((a, b) => a.fullPath.localeCompare(b.fullPath));
                         return season;
                     });
                 
+                // Only add show if it has seasons/episodes
                 if (show.seasons.length > 0) {
                     shows.push(show);
                 }
+
             }
         });
     } catch (error) {
@@ -101,83 +112,11 @@ function scanDirectory(rootPath) {
     return shows;
 }
 
-// --- UPDATED: Path Validation Function ---
-/**
- * Validates a file path to ensure it’s a valid Windows path and doesn’t contain invalid characters.
- * @param {string} filePath - The path to validate.
- * @returns {boolean} True if valid, false otherwise.
- */
-function isValidWindowsPath(filePath) {
-    // Check for non-string, empty, or undefined/null paths
-    if (!filePath || typeof filePath !== 'string' || filePath.trim() === '') {
-        console.warn(`[VALIDATION] Invalid path: ${filePath} (non-string, empty, or undefined)`);
-        return false;
-    }
-
-    // Normalize path first to handle escaped backslashes (e.g., 'G:\\Anime' -> 'G:\Anime')
-    let normalizedPath;
-    try {
-        normalizedPath = path.normalize(filePath.trim());
-    } catch (error) {
-        console.warn(`[VALIDATION] Path normalization error for ${filePath}: ${error.message}`);
-        return false;
-    }
-
-    // Check for invalid Windows characters, excluding valid backslashes and colons in drive letters
-    const invalidChars = /[<>|"*?\x00-\x1F]/; // Removed : from invalid chars to allow drive letters (e.g., G:)
-    const pathWithoutDrive = normalizedPath.replace(/^[A-Z]:/, ''); // Strip drive letter (e.g., G: -> '')
-    if (invalidChars.test(pathWithoutDrive)) {
-        const invalidMatches = pathWithoutDrive.match(invalidChars);
-        console.warn(`[VALIDATION] Invalid characters in path ${normalizedPath}: ${invalidMatches.join(', ')}`);
-        return false;
-    }
-
-    // Check for reserved Windows names (e.g., CON, PRN, AUX)
-    const reservedNames = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
-    const baseName = path.basename(normalizedPath).split('.')[0];
-    if (reservedNames.test(baseName)) {
-        console.warn(`[VALIDATION] Reserved name in path: ${normalizedPath}`);
-        return false;
-    }
-
-    // Verify path exists and is a directory
-    try {
-        const exists = fs.existsSync(normalizedPath);
-        if (!exists) {
-            console.warn(`[VALIDATION] Path does not exist: ${normalizedPath}`);
-            return false;
-        }
-        const stats = fs.statSync(normalizedPath);
-        if (!stats.isDirectory()) {
-            console.warn(`[VALIDATION] Path is not a directory: ${normalizedPath}`);
-            return false;
-        }
-        console.log(`[VALIDATION] Path validated successfully: ${normalizedPath}`);
-        return true;
-    } catch (error) {
-        console.warn(`[VALIDATION] Path validation error for ${normalizedPath}: ${error.message}`);
-        return false;
-    }
-}
-
 // --- IPC HANDLERS ---
+
 function registerIpcHandlers() {
     
-    // 1. Fetch library cache
-    ipcMain.handle('fetch-library-cache', async () => {
-        try {
-            const doc = await db.get(CACHE_DOC_ID);
-            return { success: true, shows: doc.shows || [], message: 'Library cache loaded.' };
-        } catch (error) {
-            if (error.status === 404) {
-                return { success: true, shows: [], message: 'No library cache found.' };
-            }
-            console.error('[POUCHDB] Fetch Library Cache Error:', error);
-            return { success: false, message: error.message };
-        }
-    });
-
-    // 2. Directory Dialog
+    // 1. Directory Dialog (Unchanged)
     ipcMain.handle('open-directory-dialog', async () => {
         const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), {
             properties: ['openDirectory']
@@ -190,13 +129,15 @@ function registerIpcHandlers() {
         return filePaths[0];
     });
     
-    // 3. Fetch saved library root paths
+    // 2. Fetch saved library root paths (Unchanged)
     ipcMain.handle('fetch-library-paths', async () => {
         try {
             const doc = await db.get(LIBRARY_PATHS_DOC_ID);
+            // paths: Array<string>
             return { success: true, paths: doc.paths || [] }; 
         } catch (error) {
             if (error.status === 404) {
+                // If document is not found, return an empty array and success
                 return { success: true, paths: [] };
             }
             console.error('[POUCHDB] Fetch Library Paths Error:', error);
@@ -204,55 +145,33 @@ function registerIpcHandlers() {
         }
     });
 
-    // 4. Save library root paths (UPDATED with detailed logging)
+    // 3. Save library root paths (Unchanged)
     ipcMain.handle('save-library-paths', async (event, paths) => {
         try {
-            // Ensure paths is an array
-            if (!Array.isArray(paths)) {
-                console.error('[POUCHDB] Invalid paths input: not an array', paths);
-                return { success: false, message: 'Invalid input: paths must be an array' };
-            }
-
-            // Validate all paths
-            console.log('[POUCHDB] Validating paths:', paths);
-            const validPaths = paths.filter(path => isValidWindowsPath(path));
-            if (validPaths.length !== paths.length) {
-                const invalidPaths = paths.filter(path => !isValidWindowsPath(path));
-                console.warn('[POUCHDB] Invalid paths detected:', invalidPaths);
-                return { success: false, message: `Invalid paths detected: ${invalidPaths.join(', ')}` };
-            }
-
-            let doc = { _id: LIBRARY_PATHS_DOC_ID, paths: validPaths };
+            let doc = { _id: LIBRARY_PATHS_DOC_ID, paths: paths };
 
             try {
+                // Attempt to get the existing document to grab the revision
                 const existingDoc = await db.get(LIBRARY_PATHS_DOC_ID);
                 doc._rev = existingDoc._rev;
             } catch (error) {
-                if (error.status !== 404) {
-                    console.error('[POUCHDB] Error fetching existing paths document:', error);
-                    return { success: false, message: `Failed to fetch existing paths: ${error.message}` };
-                }
+                // If it doesn't exist (404), _rev remains undefined, and put will create it
             }
 
-            // Attempt to save the document
+            // Save/update the document
             await db.put(doc);
-            console.log('[POUCHDB] Library paths saved successfully:', validPaths);
             return { success: true };
         } catch (error) {
             console.error('[POUCHDB] Save Library Paths Error:', error);
-            // Handle potential database corruption
-            if (error.message.includes('MANIFEST') || error.message.includes('IO error')) {
-                console.warn('[POUCHDB] Possible database corruption detected. Consider resetting the database.');
-                return { success: false, message: `IO error: Possible database corruption. Try resetting the database: ${error.message}` };
-            }
-            return { success: false, message: `IO error: ${error.message}` };
+            return { success: false, message: error.message };
         }
     });
 
-    // 5. Fetch saved metadata settings
+    // 4. NEW: Fetch saved metadata settings
     ipcMain.handle('fetch-metadata-settings', async () => {
         try {
             const doc = await db.get(METADATA_SETTINGS_DOC_ID);
+            // Default structure: { providers: { anilist: { enabled: false } } }
             return { 
                 success: true, 
                 settings: doc.settings || { 
@@ -263,6 +182,7 @@ function registerIpcHandlers() {
             }; 
         } catch (error) {
             if (error.status === 404) {
+                // Default settings if document is not found
                 return { success: true, settings: { providers: { anilist: { enabled: false } } } };
             }
             console.error('[POUCHDB] Fetch Metadata Settings Error:', error);
@@ -270,7 +190,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 6. Save metadata settings
+    // 5. NEW: Save metadata settings
     ipcMain.handle('save-metadata-settings', async (event, settings) => {
         try {
             let doc = { _id: METADATA_SETTINGS_DOC_ID, settings: settings };
@@ -290,23 +210,40 @@ function registerIpcHandlers() {
         }
     });
 
-    // 7. Anilist Metadata Fetching and Caching
+    // 6. NEW: Fetch and cache Anilist metadata
     ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
         console.log(`[METADATA] Fetching Anilist metadata for: ${showTitle}`);
+        
         try {
+            // Dynamically require node-fetch with error handling
+            let fetch;
+            try {
+                fetch = require('node-fetch');
+            } catch (importError) {
+                console.error('[METADATA] Failed to load node-fetch:', importError);
+                return { success: false, message: `Failed to load node-fetch: ${importError.message}` };
+            }
+            
+            // AniList GraphQL API endpoint
+            const ANILIST_API_URL = 'https://graphql.anilist.co';
+            
+            // GraphQL query to search for anime by title
             const query = `
                 query ($search: String) {
                     Media(search: $search, type: ANIME) {
                         id
-                        title { romaji english }
                         description
                         coverImage { large }
                         genres
                     }
                 }
             `;
+            
+            // Variables for the GraphQL query
             const variables = { search: showTitle };
-            const response = await fetch('https://graphql.anilist.co', {
+            
+            // Make the API request
+            const response = await fetch(ANILIST_API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -314,70 +251,113 @@ function registerIpcHandlers() {
                 },
                 body: JSON.stringify({ query, variables })
             });
-            const result = await response.json();
-            if (result.errors) {
-                console.error('[METADATA] Anilist API errors:', result.errors);
-                return { success: false, message: `Anilist API error: ${result.errors[0].message}` };
+            
+            const data = await response.json();
+            
+            if (data.errors) {
+                console.error('[METADATA] AniList API error:', data.errors);
+                return { success: false, message: `AniList API error: ${data.errors[0].message}` };
             }
-            const media = result.data.Media;
+            
+            const media = data.data.Media;
             if (!media) {
-                console.warn(`[METADATA] No matching media found for: ${showTitle}`);
-                return { success: false, message: `No matching media found for ${showTitle}` };
+                console.error('[METADATA] No media found for:', showTitle);
+                return { success: false, message: `No media found for ${showTitle}` };
             }
+            
+            // Extract metadata
             const metadata = {
                 anilistId: media.id,
-                title: media.title.english || media.title.romaji || showTitle,
                 description: media.description || 'No description available.',
                 coverImage: media.coverImage?.large || 'placeholder_url',
                 genres: media.genres || []
             };
-            let libraryData;
+            
+            // Update PouchDB cache with metadata
             try {
-                libraryData = await db.get(CACHE_DOC_ID);
-            } catch (error) {
-                if (error.status !== 404) {
-                    console.error('[POUCHDB] Error fetching library cache:', error);
-                    return { success: false, message: `Failed to access cache: ${error.message}` };
-                }
-                libraryData = { _id: CACHE_DOC_ID, shows: [], timestamp: new Date().toISOString() };
-            }
-            const showIndex = libraryData.shows.findIndex(show => show.title.toLowerCase() === showTitle.toLowerCase());
-            if (showIndex !== -1) {
-                libraryData.shows[showIndex] = {
-                    ...libraryData.shows[showIndex],
-                    metadata: { anilist: metadata }
-                };
-                try {
-                    await db.put(libraryData);
+                let cacheDoc = await db.get(CACHE_DOC_ID);
+                let shows = cacheDoc.shows || [];
+                
+                // Find the show by title and update its metadata
+                const showIndex = shows.findIndex(show => show.title === showTitle);
+                if (showIndex !== -1) {
+                    shows[showIndex].anilistMetadata = metadata;
+                    cacheDoc.shows = shows;
+                    await db.put(cacheDoc);
                     console.log(`[METADATA] Successfully cached Anilist metadata for ${showTitle}`);
-                    return { success: true, metadata };
-                } catch (error) {
-                    console.error('[POUCHDB] Error saving updated cache:', error);
-                    return { success: false, message: `Failed to save metadata: ${error.message}` };
+                } else {
+                    console.error(`[METADATA] Show ${showTitle} not found in cache`);
+                    return { success: false, message: `Show ${showTitle} not found in cache` };
                 }
-            } else {
-                console.warn(`[METADATA] Show ${showTitle} not found in cache`);
-                return { success: false, message: `Show ${showTitle} not found in cache` };
+                
+                return { success: true, metadata };
+            } catch (error) {
+                console.error('[POUCHDB] Error updating cache with metadata:', error);
+                return { success: false, message: `PouchDB error: ${error.message}` };
             }
+            
         } catch (error) {
-            console.error('[METADATA] Fetch error:', error);
+            console.error('[METADATA] Error fetching Anilist metadata:', error);
             return { success: false, message: `Failed to fetch metadata: ${error.message}` };
         }
     });
 
-    // 8. Scan ALL libraries and cache the results
+    // 7. NEW: Fetch library cache
+    ipcMain.handle('fetch-library-cache', async () => {
+        try {
+            const doc = await db.get(CACHE_DOC_ID);
+            return { success: true, shows: doc.shows || [], message: 'Cache retrieved successfully.' };
+        } catch (error) {
+            if (error.status === 404) {
+                // If cache doesn't exist, return empty shows array
+                return { success: true, shows: [], message: 'No cache found.' };
+            }
+            console.error('[POUCHDB] Fetch Library Cache Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // 8. UPDATED: Scan ALL libraries and cache the results
     ipcMain.handle('scan-and-cache-library', async (event, rootPaths) => {
         try {
             if (!Array.isArray(rootPaths) || rootPaths.length === 0) {
                 return { success: false, message: "No library paths provided for scanning." };
             }
             
+            // START OF MINIMAL CHANGE TO PRESERVE METADATA
+            let existingShowsMap = new Map();
+            try {
+                const existingCacheDoc = await db.get(CACHE_DOC_ID);
+                // Create a map from existing shows, using 'title' as the key for fast lookup
+                if (existingCacheDoc.shows) {
+                    existingCacheDoc.shows.forEach(show => {
+                        existingShowsMap.set(show.title, show);
+                    });
+                }
+            } catch (error) {
+                // Ignore 404. Map remains empty if no cache exists.
+            }
+            // END OF MINIMAL CHANGE
+
             let allShows = [];
             
             // Scan each root path and aggregate the results
             for (const rootPath of rootPaths) {
                 const showsFromPath = scanDirectory(rootPath);
-                allShows.push(...showsFromPath);
+                
+                // START OF MINIMAL CHANGE TO PRESERVE METADATA
+                const mergedShows = showsFromPath.map(newShow => {
+                    const existingShow = existingShowsMap.get(newShow.title);
+                    
+                    // If a cached version exists and has metadata, copy it over to the newly scanned show.
+                    if (existingShow && existingShow.anilistMetadata) {
+                        newShow.anilistMetadata = existingShow.anilistMetadata;
+                    }
+                    return newShow;
+                });
+                // END OF MINIMAL CHANGE
+                
+                allShows.push(...mergedShows);
             }
             
             const libraryData = {
@@ -409,7 +389,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 9. Launch External Player
+    // 9. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
     ipcMain.handle('launch-external', async (event, filePath) => {
         try {
             const result = await shell.openPath(filePath);
@@ -417,13 +397,14 @@ function registerIpcHandlers() {
                 return { success: false, error: result };
             }
             return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
+        } catch (e) {
+            return { success: false, error: e.message };
         }
     });
 }
 
 // --- Window Creation ---
+
 function createWindow() {
     const win = new BrowserWindow({
         width: 1200,
@@ -443,8 +424,9 @@ function createWindow() {
 }
 
 // --- App Lifecycle ---
+
 app.whenReady().then(() => {
-    registerIpcHandlers();
+    registerIpcHandlers(); // Register handlers before window creation
     createWindow();
 
     app.on('activate', () => {

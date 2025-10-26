@@ -99,7 +99,6 @@
           </div>
   </div>
 
-  <!-- Settings Modal Structure -->
   <div id="settings-modal" class="modal-overlay fixed inset-0 hidden items-center justify-center">
     <div class="bg-bg-deep p-8 rounded-xl shadow-2xl w-full max-w-2xl border border-border-dark transform transition-all duration-300 scale-100">
       <div class="flex justify-between items-center border-b border-border-dark pb-4 mb-6">
@@ -107,29 +106,23 @@
         <button id="close-settings-button" class="text-white hover:text-accent-purple text-xl"><i class="fa-solid fa-times"></i></button>
       </div>
 
-      <!-- Existing: Library Paths Section -->
       <h4 class="text-xl font-semibold mb-3">Media Library Folders</h4>
       <div id="library-paths-container" class="space-y-3 max-h-80 overflow-y-auto pr-2 mb-6 no-scrollbar">
-        <!-- Library paths will be rendered here -->
-      </div>
+        </div>
       
       <button id="add-library-button" class="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-semibold transition duration-200 hover:bg-green-700 shadow-md">
         <i class="fa-solid fa-plus-circle mr-2"></i> Add New Library Folder
       </button>
 
-      <!-- NEW: Metadata Providers Section -->
       <div class="mt-8">
         <h4 class="text-xl font-semibold mb-3 border-t border-border-dark pt-6">Metadata Providers</h4>
         <p class="text-sm text-text-secondary mb-4">Enable external services to automatically fetch show details, synopses, and images.</p>
         
         <div id="metadata-providers-container" class="space-y-4">
-            <!-- Anilist Provider - Expandable Design (MODIFIED) -->
             <div id="anilist-provider-card" class="p-3 bg-bg-card rounded-lg border border-border-dark space-y-3">
-                <!-- Header Row -->
                 <div class="flex justify-between items-center">
                     <div class="flex items-center space-x-3">
                         <span class="text-lg font-bold">Anilist</span>
-                        <!-- NEW: Cogwheel button -->
                         <button id="anilist-api-settings-btn" class="text-text-secondary hover:text-accent-purple transition duration-150">
                             <i class="fa-solid fa-cog text-sm"></i>
                         </button>
@@ -141,7 +134,6 @@
                 </div>
                 <p class="text-xs text-text-secondary">Fetches detailed anime and manga metadata.</p>
 
-                <!-- NEW: API Key Input Section (Hidden by default) -->
                 <div id="anilist-api-key-section" class="pt-3 border-t border-border-dark hidden">
                     <label for="anilist-api-key" class="block text-sm font-medium mb-2">Anilist API Key / Access Token (Optional)</label>
                     <input type="text" id="anilist-api-key" placeholder="Enter API Key or Token" 
@@ -149,8 +141,7 @@
                     <p class="text-xs text-text-secondary mt-1">This key is used for advanced/rate-limited features.</p>
                 </div>
             </div>
-            <!-- Other providers can be added here -->
-        </div>
+            </div>
       </div>
 
 
@@ -487,7 +478,7 @@
         let detailHTML = `
             <div class="show-header mb-12">
                 <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">Template Metadata: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata.description}: Seasons found: ${show.seasons.length}</p>
                 <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
             </div>
             
@@ -615,7 +606,7 @@
             
             setStatus(`Scanning ${appState.libraryPaths.length} libraries... This may take a moment.`, false, true);
             
-            // 2. Call the main process to scan and cache all paths
+            // Call the main process to scan and cache all paths
             const scanResponse = await window.api.scanAndCacheLibrary(appState.libraryPaths);
             
             if (scanResponse.success) {
@@ -623,31 +614,37 @@
                 setStatus(`Scan complete! Found ${scanResponse.shows.length} shows across ${appState.libraryPaths.length} libraries.`, false, false);
                 renderShows(); // RENDER THE DATA
 
-                // --- NEW: Trigger Metadata Fetching after successful file scan ---
+                // --- NEW: Trigger Metadata Fetching for all shows after successful file scan ---
                 if (appState.metadataSettings.providers.anilist.enabled) {
-                    setStatus('Starting Anilist metadata refresh in background...', false, true);
+                    setStatus('Starting Anilist metadata refresh for all shows in background...', false, true);
                     
-                    // Simple example: fetch metadata for the first show found
                     if (appState.shows.length > 0) {
-                         const showTitle = appState.shows[0].title;
-                         // Call the new IPC handler - this is ASYNCHRONOUS
-                         window.api.fetchAndCacheAnilistMetadata(showTitle) 
-                            .then(metaResponse => {
+                        // Sequentially fetch metadata for each show to avoid overwhelming the API
+                        for (const show of appState.shows) {
+                            
+                            // MINIMAL CHANGE: Skip the API fetch and delay if metadata is already cached.
+                            if (show.anilistMetadata) {
+                                console.log(`Skipping metadata fetch for cached show: ${show.title}`);
+                                continue; // Skip to the next show in the loop
+                            }
+
+                            setStatus(`Fetching metadata for ${show.title}...`, false, true);
+                            try {
+                                const metaResponse = await window.api.fetchAndCacheAnilistMetadata(show.title);
                                 if (metaResponse.success) {
-                                     // Success status is just a short confirmation
-                                     setStatus(`Metadata for ${showTitle} updated (Simulated).`, false, false);
-                                     // After a short delay, restore the main status
-                                     setTimeout(() => setStatus('Ready.', false, false), 3000); 
+                                    setStatus(`Metadata for ${show.title} updated.`, false, false);
                                 } else {
-                                     setStatus(`Metadata error for ${showTitle}: ${metaResponse.message}`, true, false);
+                                    setStatus(`Metadata error for ${show.title}: ${metaResponse.message}`, true, false);
                                 }
-                            })
-                            .catch(error => {
-                                setStatus(`Background metadata fetch failed: ${error.message}`, true, false);
-                            });
+                            } catch (error) {
+                                setStatus(`Metadata fetch failed for ${show.title}: ${error.message}`, true, false);
+                            }
+                            // Brief delay to respect Anilist rate limits (90 requests/minute)
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                        setStatus('Metadata refresh complete for all shows.', false, false);
                     } else {
-                         // No shows to fetch metadata for, revert status
-                         setTimeout(() => setStatus('Scan complete, but no shows found.', false, false), 2000);
+                        setStatus('Scan complete, but no shows found.', false, false);
                     }
                 }
             } else {
