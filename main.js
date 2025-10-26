@@ -140,7 +140,6 @@ function scanDirectory(rootPath) {
     return shows;
 }
 
-
 // --- MINIMAL CHANGE D: FFmpeg Stream Server ---
 
 function startStreamingServer() {
@@ -196,6 +195,16 @@ function startStreamingServer() {
             
             // Pipe the transcoded video directly to the HTTP response
             cmd.pipe(res, { end: true }); 
+            
+            // 🔥 NEW: Add cleanup on client disconnect
+            res.on('close', () => {
+                console.log('[SERVER] Client disconnected, killing FFmpeg.');
+                if (ffmpegProcess) {
+                    ffmpegProcess.kill('SIGTERM'); // Use SIGTERM for graceful cleanup
+                    ffmpegProcess = null;
+                }
+                currentlyStreamingPath = null; // Reset streaming path
+            });
                 
         } else {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -563,10 +572,9 @@ function registerIpcHandlers() {
                 throw new Error('Video file not found at path: ' + fullPath);
             }
             
-            // --- CRITICAL FIX: Kill the old FFmpeg process immediately when a new stream is requested. ---
+            // --- 🔥 MODIFIED: Use SIGTERM instead of SIGKILL for graceful cleanup ---
             if (ffmpegProcess) {
-                // Now that ffmpegProcess holds the command object, .kill() will work.
-                ffmpegProcess.kill('SIGKILL');
+                ffmpegProcess.kill('SIGTERM'); // Changed from SIGKILL to SIGTERM
                 ffmpegProcess = null; // Clear the reference before starting a new one.
                 console.log('[FFMPEG] Old process killed in IPC handler.');
             }
@@ -613,7 +621,6 @@ function createWindow() {
 // MINIMAL CHANGE F: Start the server immediately when the app launches
 startStreamingServer();
 
-
 // --- App Lifecycle (Modified to clean up FFmpeg) ---
 
 app.on('ready', () => {
@@ -631,7 +638,7 @@ app.on('window-all-closed', () => {
     // MINIMAL CHANGE G: Clean up FFmpeg process and server on quit
     if (ffmpegProcess) {
         // Use .kill() on the fluent-ffmpeg command object
-        ffmpegProcess.kill('SIGKILL'); 
+        ffmpegProcess.kill('SIGTERM'); 
         console.log('[FFMPEG] Process killed.');
     }
     if (this.server) {

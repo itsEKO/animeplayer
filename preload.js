@@ -1,34 +1,35 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose the necessary functions to the Renderer process
+// Expose a safe API to the renderer process
 contextBridge.exposeInMainWorld('api', {
-    // File/Directory Interaction
+    // IPC handler for opening the directory dialog
     openDirectoryDialog: () => ipcRenderer.invoke('open-directory-dialog'),
-    // REMOVED: launchExternal: (filePath) => ipcRenderer.invoke('launch-external', filePath),
 
-    // Data Management
-    fetchLibraryCache: () => ipcRenderer.invoke('fetch-library-cache'),
-    // scanAndCacheLibrary expects an array of paths
-    scanAndCacheLibrary: (rootPaths) => ipcRenderer.invoke('scan-and-cache-library', rootPaths),
-    
-    // Library Path Management
+    // IPC handler for fetching library paths
     fetchLibraryPaths: () => ipcRenderer.invoke('fetch-library-paths'),
+
+    // IPC handler for saving library paths
     saveLibraryPaths: (paths) => ipcRenderer.invoke('save-library-paths', paths),
 
-    // NEW: Metadata Settings Management
+    // IPC handler for fetching metadata settings
     fetchMetadataSettings: () => ipcRenderer.invoke('fetch-metadata-settings'),
+
+    // IPC handler for saving metadata settings
     saveMetadataSettings: (settings) => ipcRenderer.invoke('save-metadata-settings', settings),
-    
-    // NEW: Anilist Metadata Fetching (Asynchronous background task)
+
+    // IPC handler for fetching and caching Anilist metadata
     fetchAndCacheAnilistMetadata: (showTitle) => ipcRenderer.invoke('fetch-and-cache-anilist-metadata', showTitle),
-    
-    // 9. Playback Progress Saving
-    savePlaybackProgress: (showId, episodeId, currentTime, duration, isFinished) => 
+
+    // IPC handler for fetching the library cache
+    fetchLibraryCache: () => ipcRenderer.invoke('fetch-library-cache'),
+
+    // IPC handler for scanning and caching the library
+    scanAndCacheLibrary: (rootPaths) => ipcRenderer.invoke('scan-and-cache-library', rootPaths),
+
+    // IPC handler for saving playback progress
+    savePlaybackProgress: (showId, episodeId, currentTime, duration, isFinished) =>
         ipcRenderer.invoke('save-playback-progress', showId, episodeId, currentTime, duration, isFinished),
-        
-    // MINIMAL CHANGE: New handler for FFmpeg streaming
+
+    // IPC handler for starting FFmpeg streaming
     startFFmpegStream: (fullPath) => ipcRenderer.invoke('start-ffmpeg-stream', fullPath)
 });
-
-// Log to confirm preload script execution
-console.log('[PRELOAD] IPC Bridge (window.api) exposed successfully.');
