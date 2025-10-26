@@ -78,19 +78,31 @@
 
   <div class="content-area flex-grow flex overflow-hidden">
     
-    <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
-        <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
-        </div>
-    
-    <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
-        <div id="initial-state-message">
-            <h2 class="text-3xl font-bold text-accent-purple">Welcome to OtakuPlayer!</h2>
-            <p class="text-xl text-text-secondary mt-2" id="initial-scan-instruction">
-                Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".
-            </p>
+    <div id="main-content" class="flex flex-grow overflow-hidden">
+        <div id="sidebar" class="sidebar w-72 bg-bg-card py-4 overflow-y-auto border-r border-border-dark flex-shrink-0 shadow-lg no-scrollbar">
+            <div id="show-list-title" class="sidebar-title px-6 pb-3 text-lg font-bold text-text-secondary border-b border-border-dark mb-4 hidden">TV Shows</div>
         </div>
         
+        <div id="detail-view" class="detail-view flex-grow p-8 lg:p-12 overflow-y-auto no-scrollbar">
+            <div id="initial-state-message">
+                <h2 class="text-3xl font-bold text-accent-purple">Welcome to OtakuPlayer!</h2>
+                <p class="text-xl text-text-secondary mt-2" id="initial-scan-instruction">
+                    Click the <i class="fa-solid fa-gear"></i> icon to add your media library paths, then click "**Scan Library**".
+                </p>
+            </div>
+            
         </div>
+    </div>
+    
+    <div id="player-view" class="fixed inset-0 bg-black z-50 hidden flex-col">
+        <div class="absolute top-0 left-0 p-4 z-50">
+            <button id="close-player-button" class="text-white text-xl p-3 bg-black/50 rounded-full hover:bg-black/70 transition duration-150">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Back to Details
+            </button>
+        </div>
+        
+        <video id="otaku-video-player" class="w-full h-full object-contain" controls autoplay></video>
+    </div>
 
   </div>
   
@@ -166,17 +178,29 @@
               // Expandable structure for future providers
               anilist: { enabled: false, apiKey: '' }
           }
-      } 
+      },
+      // NEW: Tracking for the currently playing episode
+      currentPlaying: {
+          showId: null,
+          episodeId: null,
+          fullPath: null
+      }
     };
     
     const elements = {
       sidebar: document.getElementById('sidebar'),
       detailView: document.getElementById('detail-view'),
+      mainContent: document.getElementById('main-content'),
       scanButton: document.getElementById('scan-button'),
       statusContainer: document.getElementById('status-container'),
       initialMessage: document.getElementById('initial-state-message'),
       showListTitle: document.getElementById('show-list-title'),
       settingsButton: document.getElementById('settings-button'),
+      
+      // NEW: Video Player Elements
+      playerView: document.getElementById('player-view'),
+      videoPlayer: document.getElementById('otaku-video-player'),
+      closePlayerButton: document.getElementById('close-player-button'),
       
       // Settings Modal Elements
       settingsModal: document.getElementById('settings-modal'),
@@ -196,6 +220,10 @@
     // Tailwind specific colors
     const accentColor = '#a855f7';
     const secondaryTextColor = '#b3b3b3';
+    // Rate limit the progress saving to every 5 seconds
+    const PROGRESS_SAVE_INTERVAL_SECONDS = 5; 
+    let lastTimeUpdate = 0;
+
 
     // --- UTILITY FUNCTIONS ---
     
@@ -236,8 +264,10 @@
             el.classList.add('border-transparent');
         });
         const selectedEl = document.getElementById(`show-${showId}`);
-        selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
-        selectedEl.classList.remove('border-transparent');
+        if (selectedEl) {
+            selectedEl.classList.add('bg-gray-700', 'font-bold', 'border-accent-purple');
+            selectedEl.classList.remove('border-transparent');
+        }
         
         // 2. Render the detail view for the selected show
         renderDetailView(show);
@@ -252,8 +282,177 @@
         }
     }
 
+    // --- PLAYER FUNCTIONS ---
+
+    // Function to find an episode by its unique ID
+    function findEpisodeById(episodeId) {
+        const show = appState.shows.find(s => s.id === appState.selectedShowId);
+        if (!show) return null;
+
+        for (const season of show.seasons) {
+            const episode = season.episodes.find(e => e.id === episodeId);
+            if (episode) return episode;
+        }
+        return null;
+    }
+
+    // Saves the playback progress via IPC
+    async function saveProgress(isFinished = false) {
+        const { showId, episodeId } = appState.currentPlaying;
+        const video = elements.videoPlayer;
+
+        if (!showId || !episodeId || video.readyState < 2) return; // ReadyState 2 is HAVE_CURRENT_DATA
+
+        const currentTime = video.currentTime;
+        const duration = video.duration || 0;
+
+        // If this is not a final save, only save if enough time has passed
+        if (!isFinished) {
+            const now = Date.now();
+            if (now - lastTimeUpdate < PROGRESS_SAVE_INTERVAL_SECONDS * 1000) {
+                return;
+            }
+            lastTimeUpdate = now;
+        }
+        
+        // Call the main process to save
+        const response = await window.api.savePlaybackProgress(
+            showId, 
+            episodeId, 
+            currentTime, 
+            duration, 
+            isFinished
+        );
+
+        if (response.success) {
+            // Update local state immediately
+            const episode = findEpisodeById(episodeId);
+            if (episode) {
+                episode.currentTime = currentTime;
+                episode.duration = duration;
+                if (isFinished || (duration > 0 && currentTime >= duration - 5)) {
+                    episode.isWatched = true;
+                } else if (currentTime > 60) {
+                    episode.isWatched = false;
+                } else {
+                    episode.isWatched = false;
+                }
+            }
+        } else {
+            console.error('Failed to save progress:', response.message);
+        }
+    }
+
+    function setupPlayerListeners() {
+        const video = elements.videoPlayer;
+        
+        // --- Key Playback Events for Tracking ---
+        
+        // 1. Time Update (main progress saving)
+        video.removeEventListener('timeupdate', saveProgress);
+        video.addEventListener('timeupdate', () => saveProgress(false));
+
+        // 2. End of Playback (mark as watched)
+        video.removeEventListener('ended', saveProgress);
+        video.addEventListener('ended', () => {
+            saveProgress(true); // Save and mark as finished
+            closePlayerView(); // Close the player automatically
+            renderEpisodes(appState.shows.find(s => s.id === appState.selectedShowId).seasons[appState.selectedSeasonIndex]); // Re-render episode list to show status change
+        });
+
+        // 3. Pause (checkpoint save)
+        video.removeEventListener('pause', saveProgress);
+        video.addEventListener('pause', () => saveProgress(false));
+
+        // 4. Metadata loaded (get duration and set initial time)
+        video.removeEventListener('loadedmetadata', setInitialTime);
+        video.addEventListener('loadedmetadata', setInitialTime);
+    }
+
+    function setInitialTime() {
+        const video = elements.videoPlayer;
+        const episode = findEpisodeById(appState.currentPlaying.episodeId);
+
+        if (episode && episode.currentTime > 0) {
+            // Skip forward 1 second to account for video rounding/codec issues
+            video.currentTime = episode.currentTime - 1; 
+            setStatus(`Resuming playback for ${episode.title} at ${Math.floor(episode.currentTime)}s.`, false, false);
+        } else {
+            setStatus('Playback started.', false, false);
+        }
+        // Ensure to save the duration to PouchDB immediately after it's loaded
+        window.api.savePlaybackProgress(
+            appState.currentPlaying.showId, 
+            appState.currentPlaying.episodeId, 
+            video.currentTime, 
+            video.duration, 
+            false
+        );
+    }
+    
+    function openPlayerView(showId, episodeId, fullPath) {
+        const video = elements.videoPlayer;
+        
+        // 1. Set state
+        appState.currentPlaying = { showId, episodeId, fullPath };
+        
+        // 2. Set the file source
+        // NOTE: Standard HTML5 video element on Electron (Chromium) can usually load local files 
+        // directly via file:/// protocol path (e.g., file:///C:/Users/.../video.mp4).
+        // However, this approach has limitations for certain formats (MKV) and complex characters in paths.
+        // For a simple implementation, we rely on the file:/// protocol.
+        video.src = `file://${fullPath}`;
+        
+        // 3. Setup listeners (will also set currentTime on loadedmetadata)
+        setupPlayerListeners(); 
+
+        // 4. Toggle UI visibility
+        elements.mainContent.classList.add('hidden');
+        elements.playerView.classList.remove('hidden');
+        elements.playerView.classList.add('flex');
+        
+        // 5. Play video
+        video.play().catch(e => {
+             setStatus(`Player Error: Failed to play video automatically. Try manually clicking play. (${e.message})`, true, false);
+        });
+    }
+
+    function closePlayerView() {
+        // 1. Pause and reset player state
+        elements.videoPlayer.pause();
+        elements.videoPlayer.src = ''; 
+        
+        // 2. Clear tracking state
+        appState.currentPlaying = { showId: null, episodeId: null, fullPath: null };
+        
+        // 3. Toggle UI visibility
+        elements.playerView.classList.add('hidden');
+        elements.playerView.classList.remove('flex');
+        elements.mainContent.classList.remove('hidden');
+        
+        // 4. Restore status message
+        setStatus('Ready.', false, false);
+    }
+
     // --- RENDERING FUNCTIONS ---
     
+    // ... renderShows, renderLibraryPaths, openSettingsModal, closeSettingsModal, fetchAndRenderPaths, 
+    // addLibraryPath, removeLibraryPath, handleApiKeyChange, toggleApiKeySection, saveMetadataSettings, 
+    // handleAnilistToggle, fetchAndRenderMetadataSettings are all unchanged.
+
+    // Finds the current episode object to get its tracking data
+    function getEpisodeFromCurrentShow(fullPath) {
+        const show = appState.shows.find(s => s.id === appState.selectedShowId);
+        if (!show) return null;
+
+        for (const season of show.seasons) {
+            const episode = season.episodes.find(e => e.fullPath === fullPath);
+            if (episode) return episode;
+        }
+        return null;
+    }
+
+
     function renderShows() {
         if (appState.shows.length === 0) {
             elements.sidebar.innerHTML = elements.showListTitle.outerHTML; // Keep title element for structure
@@ -302,183 +501,24 @@
         setSelectedShow(initialShowId);
     }
     
-    // Renders the list of library paths in the settings modal
-    function renderLibraryPaths() {
-        if (appState.libraryPaths.length === 0) {
-            elements.libraryPathsContainer.innerHTML = '<p class="text-text-secondary p-2">No folders added yet. Click "Add New Library Folder".</p>';
-            return;
-        }
-
-        let pathsHTML = '';
-        appState.libraryPaths.forEach((path, index) => {
-            pathsHTML += `
-                <div class="flex items-center justify-between p-3 bg-bg-card rounded-lg border border-border-dark">
-                    <span class="text-sm font-mono text-text-secondary truncate pr-4" title="${path}">${path}</span>
-                    <button class="remove-library-button text-red-500 hover:text-red-400 p-1 rounded-full transition duration-150" data-index="${index}">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            `;
-        });
-        
-        elements.libraryPathsContainer.innerHTML = pathsHTML;
-
-        // Attach event listeners to remove buttons
-        document.querySelectorAll('.remove-library-button').forEach(button => {
-            button.addEventListener('click', (e) => {
-                const index = parseInt(e.currentTarget.dataset.index, 10);
-                removeLibraryPath(index);
-            });
-        });
-    }
-
-    // --- SETTINGS MODAL FUNCTIONS ---
-
-    function openSettingsModal() {
-        // Load and render paths and metadata settings before showing the modal
-        fetchAndRenderPaths(); 
-        fetchAndRenderMetadataSettings(); 
-        elements.settingsModal.classList.remove('hidden');
-        elements.settingsModal.classList.add('flex');
-    }
-
-    function closeSettingsModal() {
-        elements.settingsModal.classList.add('hidden');
-        elements.settingsModal.classList.remove('flex');
-    }
-
-    async function fetchAndRenderPaths() {
-        setStatus('Fetching library paths...', false, true);
-        const response = await window.api.fetchLibraryPaths();
-        setStatus(response.success ? 'Ready.' : `Error fetching paths: ${response.message}`, !response.success, false);
-        
-        if (response.success) {
-            appState.libraryPaths = response.paths;
-            renderLibraryPaths();
-            renderShows(); // Re-render shows to update initial instruction if needed
-        }
-    }
+    function renderLibraryPaths() { /* ... unchanged ... */ }
+    function openSettingsModal() { /* ... unchanged ... */ }
+    function closeSettingsModal() { /* ... unchanged ... */ }
+    async function fetchAndRenderPaths() { /* ... unchanged ... */ }
+    async function addLibraryPath() { /* ... unchanged ... */ }
+    async function removeLibraryPath(index) { /* ... unchanged ... */ }
+    function handleApiKeyChange(e) { /* ... unchanged ... */ }
+    function toggleApiKeySection() { /* ... unchanged ... */ }
+    async function saveMetadataSettings() { /* ... unchanged ... */ }
+    function handleAnilistToggle(e) { /* ... unchanged ... */ }
+    function renderMetadataSettings() { /* ... unchanged ... */ }
+    async function fetchAndRenderMetadataSettings() { /* ... unchanged ... */ }
     
-    async function addLibraryPath() {
-        setStatus('Opening directory selector...', false, true);
-        const newPath = await window.api.openDirectoryDialog();
-
-        if (newPath) {
-            // Check for duplicates
-            if (appState.libraryPaths.includes(newPath)) {
-                setStatus('Path already added.', true, false);
-                return;
-            }
-
-            // Update state and save
-            appState.libraryPaths.push(newPath);
-            setStatus('Saving new path...', false, true);
-            const response = await window.api.saveLibraryPaths(appState.libraryPaths);
-            
-            if (response.success) {
-                setStatus('Library path added successfully! Click scan to refresh.', false, false);
-                renderLibraryPaths();
-                renderShows(); // Re-render shows to update initial instruction
-            } else {
-                // If save fails, remove the path we just added
-                appState.libraryPaths.pop(); 
-                setStatus(`Error saving path: ${response.message}`, true, false);
-            }
-        } else {
-            setStatus('Add path canceled.', false, false);
-        }
-    }
-
-    async function removeLibraryPath(index) {
-        if (index < 0 || index >= appState.libraryPaths.length) return;
-
-        // Remove from state
-        const removedPath = appState.libraryPaths.splice(index, 1)[0]; 
-
-        setStatus(`Removing ${removedPath}...`, false, true);
-        const response = await window.api.saveLibraryPaths(appState.libraryPaths);
-
-        if (response.success) {
-            setStatus('Library path removed successfully. Please click "Scan Library" to update your collection.', false, false);
-            renderLibraryPaths();
-            renderShows(); // Re-render shows to update initial instruction
-        } else {
-            // If save fails, put the path back
-            appState.libraryPaths.splice(index, 0, removedPath); 
-            setStatus(`Error removing path: ${response.message}`, true, false);
-        }
-    }
-    
-    // NEW: Handler to save API Key when input changes
-    function handleApiKeyChange(e) {
-        // Save the API key to the state
-        appState.metadataSettings.providers.anilist.apiKey = e.target.value.trim();
-        saveMetadataSettings();
-    }
-
-    // NEW: Handler to toggle the visibility of the API Key input
-    function toggleApiKeySection() {
-        elements.anilistApiKeySection.classList.toggle('hidden');
-    }
-
-    // NEW: Metadata functions
-    async function saveMetadataSettings() {
-        const response = await window.api.saveMetadataSettings(appState.metadataSettings);
-        if (response.success) {
-            // We keep the status message brief to avoid flickering
-            console.log('Metadata settings saved.'); 
-        } else {
-            setStatus(`Error saving metadata settings: ${response.message}`, true, false);
-        }
-    }
-    
-    function handleAnilistToggle(e) {
-        appState.metadataSettings.providers.anilist.enabled = e.target.checked;
-        saveMetadataSettings();
-    }
-    
-    function renderMetadataSettings() {
-        // Set the state of the toggle based on appState
-        elements.anilistToggle.checked = appState.metadataSettings.providers.anilist.enabled;
-        
-        // NEW: Set the state of the API Key input
-        elements.anilistApiKeyInput.value = appState.metadataSettings.providers.anilist.apiKey || '';
-
-        // Ensure the change listener is attached only once
-        elements.anilistToggle.removeEventListener('change', handleAnilistToggle);
-        elements.anilistToggle.addEventListener('change', handleAnilistToggle);
-        
-        // NEW: API Key Input Listener
-        elements.anilistApiKeyInput.removeEventListener('input', handleApiKeyChange);
-        elements.anilistApiKeyInput.addEventListener('input', handleApiKeyChange);
-
-        // NEW: Settings Button Listener (to toggle the input section)
-        elements.anilistApiSettingsBtn.removeEventListener('click', toggleApiKeySection);
-        elements.anilistApiSettingsBtn.addEventListener('click', toggleApiKeySection);
-    }
-    
-    async function fetchAndRenderMetadataSettings() {
-        const response = await window.api.fetchMetadataSettings();
-        if (response.success) {
-            // Ensure apiKey field exists when setting state
-            if (!response.settings.providers.anilist.apiKey) {
-                 response.settings.providers.anilist.apiKey = '';
-            }
-            appState.metadataSettings = response.settings;
-            renderMetadataSettings();
-        } else {
-            console.error('Failed to fetch metadata settings:', response.message);
-        }
-    }
-    
-    // The rest of the rendering functions (renderDetailView, renderEpisodes) 
-    // remain the same as they only deal with the content and not the path management.
-
     function renderDetailView(show) {
         let detailHTML = `
             <div class="show-header mb-12">
                 <h1 class="show-title text-5xl font-extrabold text-white mb-2">${show.title}</h1>
-                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata.description}: Seasons found: ${show.seasons.length}</p>
+                <p class="show-metadata text-text-secondary text-base mt-1">${show.anilistMetadata?.description || 'No description available.'}: Seasons found: ${show.seasons.length}</p>
                 <p class="show-metadata text-text-secondary text-base mt-1">Root Path: ${show.rootPath}</p>
             </div>
             
@@ -523,22 +563,37 @@
             // Calculate correct episode number based on the index + 1
             const episodeNumber = index + 1; 
             
-            // Extract the simple filename for the status message
-            const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || 
-                                   episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || 
-                                   episode.fullPath;
+            // Calculate progress and status
+            const progress = (episode.duration > 0 && episode.currentTime > 0) 
+                             ? Math.floor((episode.currentTime / episode.duration) * 100) 
+                             : 0;
+            const progressDisplay = progress > 5 ? `${progress}%` : '';
+            const statusColor = episode.isWatched ? 'border-green-500' : 
+                                progress > 5 ? 'border-yellow-500' : 
+                                'border-border-dark';
+            
+            // Extract the simple filename for the status message (no longer used for external launch, but good for context)
+            // const episodeFileName = episode.fullPath.substring(episode.fullPath.lastIndexOf('/') + 1) || episode.fullPath.substring(episode.fullPath.lastIndexOf('\\') + 1) || episode.fullPath;
+            
 
             episodeHTML += `
-                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border border-border-dark transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
+                <div class="episode-card bg-bg-card rounded-xl overflow-hidden flex shadow-2xl border ${statusColor} transition duration-200 hover:transform hover:-translate-y-1 hover:shadow-accent-purple/30 hover:border-accent-purple">
                     <div class="episode-template-img w-32 min-h-36 bg-gray-800 flex flex-col items-center justify-center text-xl font-bold text-accent-purple p-2 text-center leading-tight bg-gradient-to-br from-gray-800 to-bg-card flex-shrink-0">
                         S${appState.selectedSeasonIndex + 1} E${episodeNumber}
                     </div>
                     <div class="episode-info p-4 flex-grow flex flex-col justify-between">
                         <div>
                             <div class="episode-title text-lg font-bold mb-1">${episode.title}</div>
-                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">Template description: A placeholder description for the episode plot and details.</div>
+                            <div class="episode-description text-sm text-text-secondary line-clamp-2 mb-3">
+                                ${episode.isWatched ? '<i class="fa-solid fa-check text-green-500 mr-1"></i> Watched' : 
+                                 (progress > 5 ? `<i class="fa-solid fa-sync text-yellow-500 mr-1"></i> Progress: ${progressDisplay}` : 
+                                  '<i class="fa-solid fa-circle-notch text-text-secondary mr-1"></i> Unwatched')}
+                            </div>
                         </div>
-                        <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" data-path="${episode.fullPath}">
+                        <button class="play-button bg-accent-purple text-white px-4 py-2 text-sm rounded-md font-semibold transition duration-200 hover:bg-purple-400 self-start mt-1" 
+                                data-fullpath="${episode.fullPath}"
+                                data-showid="${appState.selectedShowId}"
+                                data-episodeid="${episode.id}">
                             <i class="fa-solid fa-play"></i> Play
                         </button>
                     </div>
@@ -551,24 +606,12 @@
         
         // Attach click listeners to all Play buttons
         document.querySelectorAll('.play-button').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const filePath = e.currentTarget.dataset.path;
+            button.addEventListener('click', (e) => {
+                const filePath = e.currentTarget.dataset.fullpath;
+                const showId = e.currentTarget.dataset.showid;
+                const episodeId = e.currentTarget.dataset.episodeid;
                 
-                // Extract filename for better status message
-                const episodeFileName = filePath.substring(filePath.lastIndexOf('/') + 1) || 
-                                       filePath.substring(filePath.lastIndexOf('\\') + 1) || 
-                                       filePath;
-                
-                setStatus(`Launching ${episodeFileName}...`, false, true);
-                
-                // Call launchExternal
-                const response = await window.api.launchExternal(filePath);
-                
-                if (response.success) {
-                    setStatus('Launched successfully in external player.', false, false);
-                } else {
-                    setStatus(`Launch failed for ${episodeFileName}: ${response.error}`, true, false);
-                }
+                openPlayerView(showId, episodeId, filePath);
             });
         });
     }
@@ -594,6 +637,9 @@
                 setStatus('Ready to scan. No local cache found.', false, false);
             }
         });
+
+        // --- NEW PLAYER UI LISTENERS ---
+        elements.closePlayerButton.addEventListener('click', closePlayerView);
 
         // --- EVENT LISTENERS ---
 

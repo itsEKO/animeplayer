@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
     // File/Directory Interaction
     openDirectoryDialog: () => ipcRenderer.invoke('open-directory-dialog'),
-    launchExternal: (filePath) => ipcRenderer.invoke('launch-external', filePath),
+    // REMOVED: launchExternal: (filePath) => ipcRenderer.invoke('launch-external', filePath),
 
     // Data Management
     fetchLibraryCache: () => ipcRenderer.invoke('fetch-library-cache'),
@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('api', {
     
     // NEW: Anilist Metadata Fetching (Asynchronous background task)
     fetchAndCacheAnilistMetadata: (showTitle) => ipcRenderer.invoke('fetch-and-cache-anilist-metadata', showTitle),
+    
+    // 9. NEW: Playback Progress Saving
+    savePlaybackProgress: (showId, episodeId, currentTime, duration, isFinished) => 
+        ipcRenderer.invoke('save-playback-progress', showId, episodeId, currentTime, duration, isFinished),
 });
 
 // Log to confirm preload script execution

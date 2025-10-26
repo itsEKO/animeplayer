@@ -68,10 +68,17 @@ function scanDirectory(rootPath) {
                         const videoFiles = fs.readdirSync(seasonPath).filter(isVideoFile);
                         
                         videoFiles.forEach(videoFile => {
+                            // --- START: Added tracking fields and ID
+                            const fullPath = path.join(seasonPath, videoFile);
                             season.episodes.push({
+                                id: crypto.randomUUID(), 
                                 title: path.parse(videoFile).name,
-                                fullPath: path.join(seasonPath, videoFile)
+                                fullPath: fullPath,
+                                currentTime: 0, 
+                                duration: 0,    
+                                isWatched: false 
                             });
+                            // --- END: Added tracking fields and ID
                         });
                     } else if (showItem.isFile() && isVideoFile(showItem.name)) {
                         // Video file directly under the show folder (assume Season 1)
@@ -82,10 +89,17 @@ function scanDirectory(rootPath) {
                             seasonMap.set(seasonIndex, season);
                         }
                         
+                        // --- START: Added tracking fields and ID
+                        const fullPath = seasonPath; // seasonPath is actually the file path here
                         season.episodes.push({
+                            id: crypto.randomUUID(),
                             title: path.parse(showItem.name).name,
-                            fullPath: seasonPath // seasonPath is actually the file path here
+                            fullPath: fullPath,
+                            currentTime: 0, 
+                            duration: 0,    
+                            isWatched: false 
                         });
+                        // --- END: Added tracking fields and ID
                     }
                 });
 
@@ -167,7 +181,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 4. NEW: Fetch saved metadata settings
+    // 4. NEW: Fetch saved metadata settings (Unchanged)
     ipcMain.handle('fetch-metadata-settings', async () => {
         try {
             const doc = await db.get(METADATA_SETTINGS_DOC_ID);
@@ -190,7 +204,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 5. NEW: Save metadata settings
+    // 5. NEW: Save metadata settings (Unchanged)
     ipcMain.handle('save-metadata-settings', async (event, settings) => {
         try {
             let doc = { _id: METADATA_SETTINGS_DOC_ID, settings: settings };
@@ -210,7 +224,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 6. NEW: Fetch and cache Anilist metadata
+    // 6. NEW: Fetch and cache Anilist metadata (Unchanged)
     ipcMain.handle('fetch-and-cache-anilist-metadata', async (event, showTitle) => {
         console.log(`[METADATA] Fetching Anilist metadata for: ${showTitle}`);
         
@@ -302,7 +316,7 @@ function registerIpcHandlers() {
         }
     });
 
-    // 7. NEW: Fetch library cache
+    // 7. NEW: Fetch library cache (Unchanged)
     ipcMain.handle('fetch-library-cache', async () => {
         try {
             const doc = await db.get(CACHE_DOC_ID);
@@ -324,7 +338,7 @@ function registerIpcHandlers() {
                 return { success: false, message: "No library paths provided for scanning." };
             }
             
-            // START OF MINIMAL CHANGE TO PRESERVE METADATA
+            // START OF CHANGES TO PRESERVE METADATA AND TRACKING DATA
             let existingShowsMap = new Map();
             try {
                 const existingCacheDoc = await db.get(CACHE_DOC_ID);
@@ -337,7 +351,7 @@ function registerIpcHandlers() {
             } catch (error) {
                 // Ignore 404. Map remains empty if no cache exists.
             }
-            // END OF MINIMAL CHANGE
+            // END OF CHANGES
 
             let allShows = [];
             
@@ -345,17 +359,40 @@ function registerIpcHandlers() {
             for (const rootPath of rootPaths) {
                 const showsFromPath = scanDirectory(rootPath);
                 
-                // START OF MINIMAL CHANGE TO PRESERVE METADATA
+                // START OF CHANGES TO PRESERVE METADATA AND TRACKING DATA
                 const mergedShows = showsFromPath.map(newShow => {
                     const existingShow = existingShowsMap.get(newShow.title);
                     
-                    // If a cached version exists and has metadata, copy it over to the newly scanned show.
-                    if (existingShow && existingShow.anilistMetadata) {
-                        newShow.anilistMetadata = existingShow.anilistMetadata;
+                    if (existingShow) {
+                        // 1. Copy over show-level metadata
+                        if (existingShow.anilistMetadata) {
+                            newShow.anilistMetadata = existingShow.anilistMetadata;
+                        }
+                        
+                        // 2. Iterate through seasons/episodes to copy over tracking data
+                        newShow.seasons.forEach((newSeason, sIndex) => {
+                            const existingSeason = existingShow.seasons[sIndex];
+                            if (existingSeason) {
+                                newSeason.episodes.forEach(newEpisode => {
+                                    // Find the existing episode by fullPath as a reliable key
+                                    const existingEpisode = existingSeason.episodes.find(
+                                        e => e.fullPath === newEpisode.fullPath
+                                    );
+
+                                    if (existingEpisode) {
+                                        // Preserve tracking data: ID, progress, and watched status
+                                        newEpisode.id = existingEpisode.id;
+                                        newEpisode.currentTime = existingEpisode.currentTime || 0;
+                                        newEpisode.duration = existingEpisode.duration || 0;
+                                        newEpisode.isWatched = existingEpisode.isWatched || false;
+                                    }
+                                });
+                            }
+                        });
                     }
                     return newShow;
                 });
-                // END OF MINIMAL CHANGE
+                // END OF CHANGES
                 
                 allShows.push(...mergedShows);
             }
@@ -389,21 +426,58 @@ function registerIpcHandlers() {
         }
     });
 
-    // 9. Launch External Player (Renderer -> Main -> Shell) (Unchanged)
-    ipcMain.handle('launch-external', async (event, filePath) => {
+    // 9. NEW: Save Playback Progress (Renderer -> Main -> PouchDB)
+    ipcMain.handle('save-playback-progress', async (event, showId, episodeId, currentTime, duration, isFinished = false) => {
         try {
-            const result = await shell.openPath(filePath);
-            if (result.startsWith('A path could not be opened')) {
-                return { success: false, error: result };
+            let cacheDoc = await db.get(CACHE_DOC_ID);
+            let shows = cacheDoc.shows || [];
+
+            const show = shows.find(s => s.id === showId);
+
+            if (show) {
+                let episodeUpdated = false;
+                // Iterate through seasons and episodes to find the one matching the episodeId
+                for (const season of show.seasons) {
+                    const episode = season.episodes.find(e => e.id === episodeId);
+                    if (episode) {
+                        episode.currentTime = currentTime;
+                        // Only update duration if it's the first time or if a more accurate duration is received
+                        if (duration > 0) episode.duration = duration;
+
+                        // Mark as watched if the player sends the finished flag or if it's within the last 5 seconds
+                        if (isFinished || (episode.duration > 0 && currentTime >= episode.duration - 5)) {
+                            episode.isWatched = true;
+                            episode.currentTime = episode.duration; // Ensure progress is 100%
+                        } else if (currentTime > 60) {
+                            // Mark as partially watched (explicitly false for 'isWatched' if partially seen)
+                            episode.isWatched = false; 
+                        } else {
+                             // If less than 60 seconds watched, reset to unwatched state
+                            episode.isWatched = false;
+                        }
+
+                        episodeUpdated = true;
+                        break; 
+                    }
+                }
+
+                if (episodeUpdated) {
+                    await db.put(cacheDoc);
+                    return { success: true };
+                } else {
+                    return { success: false, message: `Episode with ID ${episodeId} not found.` };
+                }
+            } else {
+                return { success: false, message: `Show with ID ${showId} not found.` };
             }
-            return { success: true };
-        } catch (e) {
-            return { success: false, error: e.message };
+        } catch (error) {
+            console.error('[POUCHDB] Error saving playback progress:', error);
+            return { success: false, message: `PouchDB error: ${error.message}` };
         }
     });
 }
 
-// --- Window Creation ---
+// --- Window Creation (Unchanged) ---
 
 function createWindow() {
     const win = new BrowserWindow({
@@ -423,7 +497,7 @@ function createWindow() {
     // win.webContents.openDevTools(); // Uncomment for debugging
 }
 
-// --- App Lifecycle ---
+// --- App Lifecycle (Unchanged) ---
 
 app.whenReady().then(() => {
     registerIpcHandlers(); // Register handlers before window creation
