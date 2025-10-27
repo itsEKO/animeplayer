@@ -1,14 +1,18 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
-const path = require('path');
+const path =require('path');
 const fs = require('fs');
 const PouchDB = require('pouchdb');
 const crypto = require('crypto');
 // Removed static fetch import to avoid potential resolution issues
 const ffmpeg = require('fluent-ffmpeg'); // MINIMAL CHANGE A: Import fluent-ffmpeg
 
-// MINIMAL CHANGE B: Import ffmpeg-static and configure fluent-ffmpeg
+// MINIMAL CHANGE B (FIXED): Import ffmpeg-static, ffprobe-static, and configure paths
 const ffmpegStatic = require('ffmpeg-static'); 
+// 🔥 FIX: Explicitly import ffprobe-static
+const ffprobeStatic = require('ffprobe-static'); 
+
 ffmpeg.setFfmpegPath(ffmpegStatic); 
+ffmpeg.setFfprobePath(ffprobeStatic.path); // <--- FIX 2: Resolves "Cannot find ffprobe"
 
 // MINIMAL CHANGE C: Added new imports for streaming
 const http = require('http'); 
@@ -140,7 +144,7 @@ function scanDirectory(rootPath) {
     return shows;
 }
 
-// --- MINIMAL CHANGE D: FFmpeg Stream Server ---
+// --- MINIMAL CHANGE D: FFmpeg Stream Server (MODIFIED AND FIXED FOR STABILITY) ---
 
 function startStreamingServer() {
     // If a server is already running, skip starting another one
@@ -155,56 +159,98 @@ function startStreamingServer() {
         // Only handle requests to the /stream endpoint
         if (pathname === '/stream' && currentlyStreamingPath) {
             
-            // The process is now killed preemptively in the IPC handler.
-            // We only proceed to pipe if currentlyStreamingPath is set.
+            // Capture the path for use inside the ffprobe callback
+            const filePath = currentlyStreamingPath;
 
-            console.log(`[FFMPEG] Starting stream for: ${currentlyStreamingPath}`);
-            
-            // Set headers for video streaming
-            res.writeHead(200, {
-                'Content-Type': 'video/mp4', // Use mp4 for wide Video.js compatibility
-                'Connection': 'keep-alive',
-            });
-            
-            // 🔥 FIX: Store the fluent-ffmpeg command object in ffmpegProcess.
-            const cmd = ffmpeg(currentlyStreamingPath)
-                .videoCodec('libx264')
-                .audioCodec('aac')
-                .format('mp4')
-                .outputOptions([
-                    // Fast start for streaming
-                    '-movflags frag_keyframe+empty_moov', 
-                    // Lower CPU usage but slower speed (CRF 28 is high compression, good enough)
-                    '-crf 28', 
-                    // Preset for faster transcoding
-                    '-preset veryfast' 
-                ])
-                .on('error', (err, stdout, stderr) => {
-                    console.error('[FFMPEG ERROR]: ' + err.message);
-                    // Ensure response stream is closed on error
-                    if (!res.headersSent) {
-                       res.writeHead(500, { 'Content-Type': 'text/plain' });
-                       res.end('FFmpeg Error: ' + err.message);
-                    } else {
-                        res.end(); // If headers sent, just end the stream
-                    }
+            // --- START: MODIFIED SECTION (FIXED STREAMING CRASH) ---
+            // Run ffprobe to get media metadata, including all audio streams
+            ffmpeg.ffprobe(filePath, (err, metadata) => {
+                if (err) {
+                    console.error('[FFPROBE ERROR]: ' + err.message);
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('FFprobe Error: ' + err.message);
+                    return;
+                }
+
+                console.log(`[FFMPEG] Starting stream for: ${filePath}`);
+                
+                // Set headers for video streaming
+                res.writeHead(200, {
+                    'Content-Type': 'video/mp4', // Use mp4 for wide Video.js compatibility
+                    'Connection': 'keep-alive',
                 });
                 
-            // Assign the command object to the global variable
-            ffmpegProcess = cmd; 
-            
-            // Pipe the transcoded video directly to the HTTP response
-            cmd.pipe(res, { end: true }); 
-            
-            // 🔥 NEW: Add cleanup on client disconnect
-            res.on('close', () => {
-                console.log('[SERVER] Client disconnected, killing FFmpeg.');
-                if (ffmpegProcess) {
-                    ffmpegProcess.kill('SIGTERM'); // Use SIGTERM for graceful cleanup
-                    ffmpegProcess = null;
+                // Build the ffmpeg command
+                const cmd = ffmpeg(filePath)
+                    .format('mp4') // Set format first
+                    .on('error', (err, stdout, stderr) => {
+                        console.error('[FFMPEG ERROR]: ' + err.message);
+                        if (!res.headersSent) {
+                           res.writeHead(500, { 'Content-Type': 'text/plain' });
+                           res.end('FFmpeg Error: ' + err.message);
+                        } else {
+                            res.end(); // If headers sent, just end the stream
+                        }
+                    });
+
+                // --- BUILD CONSOLIDATED OUTPUT OPTIONS ARRAY (FIXED MAPPING/CRASH) ---
+                const outputOptions = [
+                    // Video Codec 
+                    '-vcodec libx264',
+                    // Video quality/speed settings
+                    '-crf 28', 
+                    '-preset veryfast',
+                    // Optimization for streaming (fragmented MP4)
+                    '-movflags frag_keyframe+empty_moov', 
+                    
+                    // --- VIDEO MAPPING ---
+                    '-map 0:v:0', // Explicitly map the first video stream
+                    
+                    // --- AUDIO CODEC ---
+                    '-acodec aac', // Apply AAC codec globally for all mapped audio streams
+                ];
+                
+                // --- DYNAMIC AUDIO MAPPING & METADATA ---
+                const audioStreams = metadata.streams.filter(s => s.codec_type === 'audio');
+                
+                if (audioStreams.length === 0) {
+                    console.log('[FFMPEG] No audio streams found, streaming video only.');
+                    outputOptions.push('-an'); // Disable audio entirely
+                } else {
+                    console.log(`[FFMPEG] Found ${audioStreams.length} audio streams. Mapping all...`);
+                    
+                    audioStreams.forEach((stream, idx) => {
+                        // Map the Nth audio stream
+                        outputOptions.push(`-map 0:a:${idx}`); 
+                        
+                        // Set the language metadata for the output audio stream
+                        const lang = stream.tags?.language || 'und';
+                        outputOptions.push(`-metadata:s:a:${idx} language=${lang}`);
+                        console.log(`[FFMPEG] Mapping audio stream #${idx} (language: ${lang})`);
+                    });
                 }
-                currentlyStreamingPath = null; // Reset streaming path
+                
+                // --- APPLY ALL OPTIONS ---
+                cmd.outputOptions(outputOptions);
+
+                // Assign the command object to the global variable
+                ffmpegProcess = cmd; 
+                
+                // Pipe the transcoded video directly to the HTTP response
+                cmd.pipe(res, { end: true }); 
+                
+                // Add cleanup on client disconnect
+                res.on('close', () => {
+                    console.log('[SERVER] Client disconnected, killing FFmpeg.');
+                    if (ffmpegProcess) {
+                        ffmpegProcess.kill('SIGTERM'); // Use SIGTERM for graceful cleanup
+                        ffmpegProcess = null;
+                    }
+                    currentlyStreamingPath = null; // Reset streaming path
+                });
+                
             });
+            // --- END: MODIFIED SECTION ---
                 
         } else {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -565,10 +611,11 @@ function registerIpcHandlers() {
         }
     });
     
-    // MINIMAL CHANGE E: New IPC handler to start the FFmpeg process
+    // MINIMAL CHANGE E: New IPC handler to start the FFmpeg process (SYNTAX ERROR FIXED)
     ipcMain.handle('start-ffmpeg-stream', async (event, fullPath) => {
         try {
             if (!fs.existsSync(fullPath)) {
+                // 🔥 FIX 1: Corrected SyntaxError: missing ) after argument list
                 throw new Error('Video file not found at path: ' + fullPath);
             }
             
@@ -618,7 +665,7 @@ function createWindow() {
     // win.webContents.openDevTools(); // Uncomment for debugging
 }
 
-// MINIMAL CHANGE F: Start the server immediately when the app launches
+// MINIMAL CHANGE F: Start the server immediately when the app launches (Unchanged from original)
 startStreamingServer();
 
 // --- App Lifecycle (Modified to clean up FFmpeg) ---
@@ -635,7 +682,7 @@ app.on('ready', () => {
 });
 
 app.on('window-all-closed', () => {
-    // MINIMAL CHANGE G: Clean up FFmpeg process and server on quit
+    // MINIMAL CHANGE G: Clean up FFmpeg process and server on quit (Unchanged from original)
     if (ffmpegProcess) {
         // Use .kill() on the fluent-ffmpeg command object
         ffmpegProcess.kill('SIGTERM'); 

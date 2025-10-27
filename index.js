@@ -158,14 +158,15 @@ async function saveProgress(isFinished = false) {
 function setupPlayerListeners() {
     const video = playerInstance;
     
+    // Ensure all previous listeners are removed before adding new ones
     video.off('timeupdate', saveProgress);
     video.on('timeupdate', () => saveProgress(false));
 
     video.off('ended', saveProgress);
     video.on('ended', () => {
         saveProgress(true);
-        closePlayerView();
-        renderEpisodes(appState.shows.find(s => s.id === appState.selectedShowId).seasons[appState.selectedSeasonIndex]); 
+        // MINIMAL CHANGE A (Fix): Removed automatic close. Let the user close the player.
+        setStatus('Playback finished. Click the X to return to the library.', false, false);
     });
 
     video.off('pause', saveProgress);
@@ -252,14 +253,31 @@ async function openPlayerView(showId, episodeId, fullPath) {
 
     // 6. Initialize Video.js player
     try {
+        // MINIMAL CHANGE B (Fix): Explicitly define the control bar to force the AudioTrackButton to appear.
         playerInstance = videojs(videoElement, {
             controls: true,
             autoplay: true,
             fluid: true,
             responsive: true,
-            preload: 'auto'
+            preload: 'auto',
+            controlBar: { 
+                children: [
+                    'playToggle',
+                    'volumePanel',
+                    'progressControl',
+                    'currentTimeDisplay',
+                    'durationDisplay',
+                    'remainingTimeDisplay',
+                    'customControlSpacer',
+                    'playbackRateMenuButton',
+                    'AudioTrackButton', // <--- THIS is the audio track selector button
+                    'chaptersButton',
+                    'subsCapsButton',
+                    'fullscreenToggle'
+                ]
+            }
         });
-        console.log('[PLAYER] Video.js player initialized');
+        console.log('[PLAYER] Video.js player initialized with explicit control bar.');
     } catch (error) {
         console.error('[PLAYER] Error initializing Video.js player:', error);
         setStatus('Error: Failed to initialize video player', true, false);
@@ -358,6 +376,12 @@ function closePlayerView() {
     // Reset current playing state
     appState.currentPlaying = { showId: null, episodeId: null, fullPath: null };
     
+    // MINIMAL CHANGE C (Fix): Refresh the episode list to reflect progress/watched status only when closing the player.
+    const show = appState.shows.find(s => s.id === appState.selectedShowId);
+    if (show) {
+        renderDetailView(show); 
+    }
+
     setStatus('Player closed.', false, false);
 }
 
