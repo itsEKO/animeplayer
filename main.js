@@ -154,16 +154,272 @@ function startStreamingServer() {
     
     // Create the HTTP server
     this.server = http.createServer((req, res) => {
-        const { pathname } = parse(req.url, true);
+        const { pathname, query } = parse(req.url, true);
 
-        // Only handle requests to the /stream endpoint
-        if (pathname === '/stream' && currentlyStreamingPath) {
+        // Handle subtitle extraction endpoint
+        if (pathname === '/subtitle' && currentlyStreamingPath) {
+            const subtitleIndex = parseInt(query.track) || 0;
             
-            // Capture the path for use inside the ffprobe callback
-            const filePath = currentlyStreamingPath;
+            if (!currentlyStreamingPath) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('No media file loaded');
+                return;
+            }
 
-            // --- START: MODIFIED SECTION (FIXED STREAMING CRASH) ---
-            // Run ffprobe to get media metadata, including all audio streams
+            console.log(`[SUBTITLE] Extracting subtitle track ${subtitleIndex} from: ${currentlyStreamingPath}`);
+            
+            // First, get metadata to find the correct stream index
+            ffmpeg.ffprobe(currentlyStreamingPath, (err, metadata) => {
+                if (err) {
+                    console.error('[SUBTITLE] Error getting metadata for subtitle extraction:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('Error reading media metadata: ' + err.message);
+                    return;
+                }
+
+                const subtitleStreams = metadata.streams.filter(s => s.codec_type === 'subtitle');
+                
+                if (subtitleIndex >= subtitleStreams.length) {
+                    console.error(`[SUBTITLE] Subtitle track ${subtitleIndex} not found. Available: ${subtitleStreams.length}`);
+                    res.writeHead(404, { 'Content-Type': 'text/plain' });
+                    res.end(`Subtitle track ${subtitleIndex} not found`);
+                    return;
+                }
+
+                const actualStreamIndex = subtitleStreams[subtitleIndex].index;
+                console.log(`[SUBTITLE] Using actual stream index ${actualStreamIndex} for subtitle track ${subtitleIndex}`);
+                
+                // Set headers for WebVTT
+                res.writeHead(200, {
+                    'Content-Type': 'text/vtt',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET',
+                    'Access-Control-Allow-Headers': 'Content-Type'
+                });
+
+                // Extract subtitle using ffmpeg with correct stream index
+                const subtitleCommand = ffmpeg(currentlyStreamingPath)
+                    .outputOptions([
+                        `-map 0:${actualStreamIndex}`,  // Use actual stream index, not subtitle array index
+                        '-c:s webvtt',
+                        '-f webvtt'
+                    ])
+                    .on('error', (err) => {
+                        console.error(`[SUBTITLE] Error extracting subtitle ${subtitleIndex}:`, err.message);
+                        if (!res.headersSent) {
+                            res.writeHead(500, { 'Content-Type': 'text/plain' });
+                            res.end(`Error extracting subtitle: ${err.message}`);
+                        } else {
+                            res.end();
+                        }
+                    })
+                    .on('start', (cmdLine) => {
+                        console.log(`[SUBTITLE] Started extraction: ${cmdLine}`);
+                    });
+
+                // Stream subtitle to response
+                subtitleCommand.pipe(res, { end: true });
+            });
+            return;
+        }
+
+        // Handle audio track switch endpoint
+        if (pathname === '/switch-audio' && currentlyStreamingPath) {
+            const audioTrackIndex = parseInt(query.track) || 0;
+            
+            console.log(`[AUDIO] Switching to audio track ${audioTrackIndex}`);
+            
+            // Store the selected audio track globally (don't kill process here)
+            global.selectedAudioTrack = audioTrackIndex;
+            
+            res.writeHead(200, { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify({ success: true, message: `Audio track ${audioTrackIndex} selected` }));
+            return;
+        }
+
+        // Handle direct file serving endpoint (only for browser-compatible formats)
+        if (pathname === '/video' && currentlyStreamingPath) {
+            const filePath = currentlyStreamingPath;
+            const ext = path.extname(filePath).toLowerCase();
+            
+            // Only serve MP4 and WebM files directly, force MKV to use transcoding
+            if (ext === '.mkv' || ext === '.avi' || ext === '.mov' || ext === '.flv') {
+                console.log(`[DIRECT] Redirecting ${ext} to transcoding - not browser compatible`);
+                res.writeHead(302, { 'Location': '/test-stream' });
+                res.end();
+                return;
+            }
+            
+            console.log(`[DIRECT] Serving compatible video file: ${filePath}`);
+            
+            // Check if file exists
+            if (!fs.existsSync(filePath)) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Video file not found');
+                return;
+            }
+
+            // Get file stats for range requests (seeking support)
+            const stat = fs.statSync(filePath);
+            const fileSize = stat.size;
+            const range = req.headers.range;
+
+            // Handle range requests for seeking
+            if (range) {
+                const parts = range.replace(/bytes=/, "").split("-");
+                const start = parseInt(parts[0], 10);
+                const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+                const chunksize = (end - start) + 1;
+                
+                console.log(`[DIRECT] Range request: ${start}-${end}/${fileSize}`);
+                
+                const file = fs.createReadStream(filePath, { start, end });
+                
+                const contentType = ext === '.mp4' ? 'video/mp4' : 'video/webm';
+                
+                res.writeHead(206, {
+                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': chunksize,
+                    'Content-Type': contentType,
+                });
+                
+                file.pipe(res);
+            } else {
+                // Full file request
+                console.log(`[DIRECT] Full file request: ${fileSize} bytes`);
+                
+                const contentType = ext === '.mp4' ? 'video/mp4' : 'video/webm';
+                
+                res.writeHead(200, {
+                    'Content-Length': fileSize,
+                    'Content-Type': contentType,
+                    'Accept-Ranges': 'bytes',
+                });
+                
+                fs.createReadStream(filePath).pipe(res);
+            }
+            return;
+        }
+
+        // Handle MKV transcoding stream (converts MKV to MP4 for browsers)
+        if (pathname === '/test-stream' && currentlyStreamingPath) {
+            const filePath = currentlyStreamingPath;
+            
+            console.log(`[MKV-TRANSCODE] Starting MKV to MP4 conversion: ${filePath}`);
+            
+            // Get metadata first to handle audio tracks properly
+            ffmpeg.ffprobe(filePath, (err, metadata) => {
+                if (err) {
+                    console.error('[MKV-TRANSCODE] Probe error:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('Error reading MKV file: ' + err.message);
+                    return;
+                }
+
+                const audioStreams = metadata.streams.filter(s => s.codec_type === 'audio');
+                const videoStreams = metadata.streams.filter(s => s.codec_type === 'video');
+                const selectedAudioTrack = global.selectedAudioTrack || 0;
+                
+                console.log(`[MKV-TRANSCODE] Found ${videoStreams.length} video streams, ${audioStreams.length} audio streams`);
+                
+                if (videoStreams.length === 0) {
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('No video stream found in MKV file');
+                    return;
+                }
+                
+                const duration = metadata.format.duration;
+                console.log(`[MKV-TRANSCODE] Video duration: ${duration}s`);
+                
+                const headers = {
+                    'Content-Type': 'video/mp4',
+                    'Connection': 'keep-alive',
+                    'Accept-Ranges': 'bytes',
+                    'Cache-Control': 'no-cache'
+                };
+                
+                // Add duration header if available
+                if (duration && !isNaN(duration)) {
+                    headers['X-Duration'] = duration.toString();
+                    headers['X-Content-Duration'] = duration.toString();
+                }
+                
+                res.writeHead(200, headers);
+                
+                const cmd = ffmpeg(filePath)
+                    .videoCodec('libx264')
+                    .audioCodec('aac')
+                    .format('mp4')
+                    .outputOptions([
+                        '-map 0:v:0',  // Map first video stream
+                        '-preset ultrafast',
+                        '-crf 23',
+                        '-pix_fmt yuv420p',
+                        '-movflags frag_keyframe+empty_moov+faststart+dash',
+                        '-avoid_negative_ts make_zero',
+                        '-fflags +genpts',
+                        '-copyts',
+                        '-start_at_zero',
+                        '-vsync cfr'  // Constant frame rate for better timeline support
+                    ])
+                    .on('start', (cmdLine) => {
+                        console.log('[MKV-TRANSCODE] FFmpeg command:', cmdLine);
+                    })
+                    .on('progress', (progress) => {
+                        if (progress.frames) {
+                            console.log(`[MKV-TRANSCODE] Progress: ${progress.frames} frames processed`);
+                        }
+                    })
+                    .on('error', (err, stdout, stderr) => {
+                        console.error('[MKV-TRANSCODE ERROR]:', err.message);
+                        console.error('[MKV-TRANSCODE STDERR]:', stderr);
+                        if (!res.headersSent) {
+                            res.writeHead(500, { 'Content-Type': 'text/plain' });
+                            res.end('Transcoding error: ' + err.message);
+                        } else {
+                            res.end();
+                        }
+                    });
+                
+                // Add audio track mapping
+                if (audioStreams.length > 0 && selectedAudioTrack < audioStreams.length) {
+                    cmd.outputOptions(`-map 0:a:${selectedAudioTrack}`);
+                    const lang = audioStreams[selectedAudioTrack].tags?.language || 'und';
+                    console.log(`[MKV-TRANSCODE] Using audio track ${selectedAudioTrack} (${lang})`);
+                } else if (audioStreams.length > 0) {
+                    cmd.outputOptions('-map 0:a:0'); // Default to first audio track
+                    console.log('[MKV-TRANSCODE] Using default first audio track');
+                } else {
+                    cmd.outputOptions('-an'); // No audio
+                    console.log('[MKV-TRANSCODE] No audio streams found');
+                }
+                
+                cmd.pipe(res, { end: true });
+                ffmpegProcess = cmd;
+                
+                res.on('close', () => {
+                    console.log('[MKV-TRANSCODE] Client disconnected, stopping transcoding');
+                    if (ffmpegProcess) {
+                        ffmpegProcess.kill('SIGTERM');
+                        ffmpegProcess = null;
+                    }
+                });
+            });
+            return;
+        }
+
+        // Handle transcoded stream endpoint (when direct playback isn't compatible)
+        if (pathname === '/stream' && currentlyStreamingPath) {
+            const filePath = currentlyStreamingPath;
+            const range = req.headers.range;
+            
+            console.log(`[TRANSCODE] Starting transcoding for: ${filePath}`);
+            
+            // Run ffprobe to get media metadata
             ffmpeg.ffprobe(filePath, (err, metadata) => {
                 if (err) {
                     console.error('[FFPROBE ERROR]: ' + err.message);
@@ -171,91 +427,128 @@ function startStreamingServer() {
                     res.end('FFprobe Error: ' + err.message);
                     return;
                 }
-
-                console.log(`[FFMPEG] Starting stream for: ${filePath}`);
                 
-                // Set headers for video streaming
-                res.writeHead(200, {
-                    'Content-Type': 'video/mp4', // Use mp4 for wide Video.js compatibility
-                    'Connection': 'keep-alive',
-                });
-                
-                // Build the ffmpeg command
-                const cmd = ffmpeg(filePath)
-                    .format('mp4') // Set format first
-                    .on('error', (err, stdout, stderr) => {
-                        console.error('[FFMPEG ERROR]: ' + err.message);
-                        if (!res.headersSent) {
-                           res.writeHead(500, { 'Content-Type': 'text/plain' });
-                           res.end('FFmpeg Error: ' + err.message);
-                        } else {
-                            res.end(); // If headers sent, just end the stream
-                        }
-                    });
-
-                // --- BUILD CONSOLIDATED OUTPUT OPTIONS ARRAY (FIXED MAPPING/CRASH) ---
-                const outputOptions = [
-                    // Video Codec 
-                    '-vcodec libx264',
-                    // Video quality/speed settings
-                    '-crf 28', 
-                    '-preset veryfast',
-                    // Optimization for streaming (fragmented MP4)
-                    '-movflags frag_keyframe+empty_moov', 
-                    
-                    // --- VIDEO MAPPING ---
-                    '-map 0:v:0', // Explicitly map the first video stream
-                    
-                    // --- AUDIO CODEC ---
-                    '-acodec aac', // Apply AAC codec globally for all mapped audio streams
-                ];
-                
-                // --- DYNAMIC AUDIO MAPPING & METADATA ---
                 const audioStreams = metadata.streams.filter(s => s.codec_type === 'audio');
+                const selectedAudioTrack = global.selectedAudioTrack || 0;
+                const duration = metadata.format.duration;
                 
-                if (audioStreams.length === 0) {
-                    console.log('[FFMPEG] No audio streams found, streaming video only.');
-                    outputOptions.push('-an'); // Disable audio entirely
+                // Handle range/seeking requests
+                let seekTime = 0;
+                if (range) {
+                    // Parse range header to determine seek time (approximate)
+                    const rangeMatch = range.match(/bytes=(\d+)-/);
+                    if (rangeMatch && duration) {
+                        const byteStart = parseInt(rangeMatch[1]);
+                        const fileSize = metadata.format.size || (duration * 1000000); // Estimate
+                        seekTime = (byteStart / fileSize) * duration;
+                        console.log(`[TRANSCODE] Seeking to approximately ${seekTime}s based on byte range`);
+                    }
+                }
+                
+                // Set headers for transcoded streaming
+                if (range) {
+                    res.writeHead(206, {
+                        'Content-Type': 'video/mp4',
+                        'Accept-Ranges': 'bytes',
+                        'Connection': 'keep-alive',
+                    });
                 } else {
-                    console.log(`[FFMPEG] Found ${audioStreams.length} audio streams. Mapping all...`);
-                    
-                    audioStreams.forEach((stream, idx) => {
-                        // Map the Nth audio stream
-                        outputOptions.push(`-map 0:a:${idx}`); 
-                        
-                        // Set the language metadata for the output audio stream
-                        const lang = stream.tags?.language || 'und';
-                        outputOptions.push(`-metadata:s:a:${idx} language=${lang}`);
-                        console.log(`[FFMPEG] Mapping audio stream #${idx} (language: ${lang})`);
+                    res.writeHead(200, {
+                        'Content-Type': 'video/mp4',
+                        'Accept-Ranges': 'bytes',
+                        'Connection': 'keep-alive',
                     });
                 }
                 
-                // --- APPLY ALL OPTIONS ---
-                cmd.outputOptions(outputOptions);
+                // Verify we have a video stream to transcode
+                if (videoStreams.length === 0) {
+                    console.error('[TRANSCODE] No video streams found in file!');
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('No video stream found in file');
+                    return;
+                }
 
-                // Assign the command object to the global variable
-                ffmpegProcess = cmd; 
+                // Build optimized transcoding command
+                const cmd = ffmpeg(filePath)
+                    .on('error', (err, stdout, stderr) => {
+                        console.error('[TRANSCODE ERROR]: ' + err.message);
+                        console.error('[TRANSCODE STDERR]:', stderr);
+                        if (!res.headersSent) {
+                           res.writeHead(500, { 'Content-Type': 'text/plain' });
+                           res.end('Transcode Error: ' + err.message);
+                        } else {
+                            res.end();
+                        }
+                    })
+                    .on('start', (cmdLine) => {
+                        console.log('[TRANSCODE] FFmpeg command:', cmdLine);
+                    })
+                    .on('progress', (progress) => {
+                        if (progress.frames) {
+                            console.log(`[TRANSCODE] Progress: ${progress.frames} frames, ${progress.currentFps} fps`);
+                        }
+                    });
+
+                // Log video stream info for debugging
+                const videoStreams = metadata.streams.filter(s => s.codec_type === 'video');
+                console.log(`[TRANSCODE] Video streams found: ${videoStreams.length}`);
+                if (videoStreams.length > 0) {
+                    const videoStream = videoStreams[0];
+                    console.log(`[TRANSCODE] Video codec: ${videoStream.codec_name}, Resolution: ${videoStream.width}x${videoStream.height}`);
+                }
+
+                const outputOptions = [
+                    // Video encoding options
+                    '-c:v libx264',           // Video codec
+                    '-preset ultrafast',      // Fastest encoding for real-time
+                    '-crf 23',               // Quality setting
+                    '-pix_fmt yuv420p',      // Pixel format for web compatibility
+                    '-profile:v baseline',    // H.264 baseline profile for compatibility
+                    '-level 3.0',            // H.264 level
+                    '-maxrate 5M',           // Max bitrate
+                    '-bufsize 10M',          // Buffer size
+                    '-movflags frag_keyframe+empty_moov+faststart+default_base_moof',
+                    '-avoid_negative_ts make_zero',
+                    '-fflags +genpts',       // Generate presentation timestamps
+                    '-f mp4',
+                    '-map 0:v:0'             // Map first video stream
+                ];
                 
-                // Pipe the transcoded video directly to the HTTP response
-                cmd.pipe(res, { end: true }); 
+                // Add seeking if requested
+                if (seekTime > 0) {
+                    cmd.seekInput(seekTime);
+                }
                 
-                // Add cleanup on client disconnect
+                // Map selected audio track
+                if (audioStreams.length > 0 && selectedAudioTrack < audioStreams.length) {
+                    outputOptions.push(`-map 0:a:${selectedAudioTrack}`);
+                    outputOptions.push('-acodec aac');
+                    outputOptions.push('-b:a 128k');
+                    const lang = audioStreams[selectedAudioTrack].tags?.language || 'und';
+                    console.log(`[TRANSCODE] Using audio track ${selectedAudioTrack} (${lang})`);
+                } else {
+                    outputOptions.push('-an'); // No audio
+                }
+                
+                cmd.outputOptions(outputOptions);
+                
+                ffmpegProcess = cmd;
+                cmd.pipe(res, { end: true });
+                
                 res.on('close', () => {
-                    console.log('[SERVER] Client disconnected, killing FFmpeg.');
+                    console.log('[TRANSCODE] Client disconnected, killing FFmpeg.');
                     if (ffmpegProcess) {
-                        ffmpegProcess.kill('SIGTERM'); // Use SIGTERM for graceful cleanup
+                        ffmpegProcess.kill('SIGTERM');
                         ffmpegProcess = null;
                     }
-                    currentlyStreamingPath = null; // Reset streaming path
                 });
-                
             });
-            // --- END: MODIFIED SECTION ---
-                
-        } else {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Not Found or Stream Path not set.');
+            return;
         }
+        
+        // 404 for unknown paths
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
     }).listen(STREAMING_PORT, () => {
         console.log(`[SERVER] Streaming server listening on port ${STREAMING_PORT}`);
     });
@@ -611,35 +904,131 @@ function registerIpcHandlers() {
         }
     });
     
-    // MINIMAL CHANGE E: New IPC handler to start the FFmpeg process (SYNTAX ERROR FIXED)
-    ipcMain.handle('start-ffmpeg-stream', async (event, fullPath) => {
+    // NEW: IPC handler to get media metadata (audio/subtitle tracks)
+    ipcMain.handle('get-media-metadata', async (event, filePath) => {
+        try {
+            if (!fs.existsSync(filePath)) {
+                throw new Error('Video file not found at path: ' + filePath);
+            }
+
+            return new Promise((resolve, reject) => {
+                ffmpeg.ffprobe(filePath, (err, metadata) => {
+                    if (err) {
+                        console.error('[FFPROBE] Error getting metadata:', err);
+                        reject(new Error('Failed to read media metadata: ' + err.message));
+                        return;
+                    }
+
+                    try {
+                        const audioTracks = metadata.streams
+                            .filter(stream => stream.codec_type === 'audio')
+                            .map((stream, index) => ({
+                                index: index,
+                                streamIndex: stream.index,
+                                language: stream.tags?.language || 'und',
+                                title: stream.tags?.title || `Audio Track ${index + 1}`,
+                                codec: stream.codec_name,
+                                channels: stream.channels,
+                                sampleRate: stream.sample_rate
+                            }));
+
+                        const subtitleTracks = metadata.streams
+                            .filter(stream => stream.codec_type === 'subtitle')
+                            .map((stream, index) => ({
+                                index: index,
+                                streamIndex: stream.index,
+                                language: stream.tags?.language || 'und',
+                                title: stream.tags?.title || `Subtitle Track ${index + 1}`,
+                                codec: stream.codec_name,
+                                forced: stream.disposition?.forced === 1,
+                                default: stream.disposition?.default === 1
+                            }));
+
+                        console.log(`[METADATA] Found ${audioTracks.length} audio tracks and ${subtitleTracks.length} subtitle tracks`);
+                        
+                        resolve({
+                            success: true,
+                            audioTracks: audioTracks,
+                            subtitleTracks: subtitleTracks,
+                            duration: metadata.format.duration
+                        });
+                    } catch (parseError) {
+                        console.error('[METADATA] Error parsing metadata:', parseError);
+                        reject(new Error('Failed to parse media metadata: ' + parseError.message));
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('[METADATA] Error:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // ENHANCED: Video serving handler with direct file access and transcoding fallback
+    ipcMain.handle('start-video-playback', async (event, fullPath, options = {}) => {
         try {
             if (!fs.existsSync(fullPath)) {
-                // 🔥 FIX 1: Corrected SyntaxError: missing ) after argument list
                 throw new Error('Video file not found at path: ' + fullPath);
             }
             
-            // --- 🔥 MODIFIED: Use SIGTERM instead of SIGKILL for graceful cleanup ---
+            // Kill existing process
             if (ffmpegProcess) {
-                ffmpegProcess.kill('SIGTERM'); // Changed from SIGKILL to SIGTERM
-                ffmpegProcess = null; // Clear the reference before starting a new one.
-                console.log('[FFMPEG] Old process killed in IPC handler.');
+                ffmpegProcess.kill('SIGTERM');
+                ffmpegProcess = null;
+                console.log('[VIDEO] Old process killed in IPC handler.');
             }
-            // --- END FIX ---
             
-            // Set the path globally for the HTTP server to pick up
+            // Set the path and options globally for the HTTP server
             currentlyStreamingPath = fullPath;
+            global.streamingOptions = options;
+            global.selectedAudioTrack = options.audioTrack || 0;
             
-            // Return the URL that the Video.js player should connect to
-            const streamUrl = `http://localhost:${STREAMING_PORT}/stream`;
-            return { success: true, url: streamUrl };
+            // Check if file is directly playable by browsers (only MP4 and WebM work reliably)
+            const ext = path.extname(fullPath).toLowerCase();
+            const directPlayableFormats = ['.mp4', '.webm'];
+            const needsTranscodingFormats = ['.mkv', '.avi', '.mov', '.flv'];
+            
+            let videoUrl;
+            let needsTranscoding = false;
+            
+            if (directPlayableFormats.includes(ext)) {
+                // Direct serving for browser-compatible formats
+                videoUrl = `http://localhost:${STREAMING_PORT}/video`;
+                console.log(`[VIDEO] Direct playback for ${ext} file`);
+            } else {
+                // Use simple transcoding for MKV and other formats that browsers can't play directly
+                videoUrl = `http://localhost:${STREAMING_PORT}/test-stream`;
+                needsTranscoding = true;
+                console.log(`[VIDEO] Simple transcoding for ${ext} file`);
+            }
+            
+            return { 
+                success: true, 
+                url: videoUrl,
+                needsTranscoding: needsTranscoding,
+                format: ext 
+            };
             
         } catch (error) {
-            console.error('[FFMPEG] Failed to start stream:', error);
-            // Re-throw the error with a check in case the kill was the issue
-            if (error.message.includes('ffmpegProcess.kill')) {
-                 return { success: false, message: 'Internal Stream Error: Check console for kill process failure.' };
-            }
+            console.error('[VIDEO] Failed to start playback:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
+    // Legacy handler for compatibility
+    ipcMain.handle('start-ffmpeg-stream', async (event, fullPath, options = {}) => {
+        // Just call the new handler directly
+        const result = await new Promise((resolve) => {
+            resolve(ipcMain.emit('start-video-playback', event, fullPath, options));
+        });
+        
+        // For compatibility, just return the URL in old format
+        try {
+            currentlyStreamingPath = fullPath;
+            global.selectedAudioTrack = options.audioTrack || 0;
+            const videoUrl = `http://localhost:${STREAMING_PORT}/video`;
+            return { success: true, url: videoUrl };
+        } catch (error) {
             return { success: false, message: error.message };
         }
     });

@@ -63,6 +63,105 @@
         backdrop-filter: blur(5px);
         background-color: rgba(0, 0, 0, 0.75);
     }
+
+    /* Custom Player Controls */
+    .track-menu-item {
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+    
+    .track-menu-item:hover {
+        background-color: #333333;
+    }
+    
+    .track-menu-item.active {
+        background-color: #a855f7;
+        color: white;
+    }
+    
+    .track-language-tag {
+        font-size: 0.7rem;
+        padding: 0.125rem 0.375rem;
+        background-color: #4b5563;
+        color: #d1d5db;
+        border-radius: 0.25rem;
+        margin-left: 0.5rem;
+        text-transform: uppercase;
+    }
+
+    /* Video.js Custom Styling */
+    .vjs-menu-button-popup .vjs-menu .vjs-menu-content {
+        background-color: #1a1a1a;
+        border: 1px solid #333333;
+    }
+    
+    .vjs-menu li {
+        color: #ffffff;
+    }
+    
+    .vjs-menu li:hover,
+    .vjs-menu li.vjs-selected {
+        background-color: #a855f7;
+    }
+
+    /* Auto-hide UI Controls */
+    .player-controls-fade {
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .player-controls-hidden {
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    .player-controls-visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    
+    /* Video.js control bar auto-hide */
+    .vjs-user-inactive .vjs-control-bar {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .vjs-user-active .vjs-control-bar {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    /* Custom controls auto-hide */
+    .vjs-user-inactive #custom-player-controls {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .vjs-user-active #custom-player-controls {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    /* Back button and custom controls styling */
+    #custom-player-controls, #close-player-button {
+        transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+    }
+    
+    /* Back button auto-hide */
+    .vjs-user-inactive .player-back-button {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .vjs-user-active .player-back-button {
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 0.3s ease-in-out;
+    }
   </style>
 </head>
 <body class="bg-bg-deep text-white flex flex-col h-screen overflow-hidden">
@@ -97,10 +196,39 @@
     </div>
     
     <div id="player-view" class="fixed inset-0 bg-black z-50 hidden flex-col">
-        <div class="absolute top-0 left-0 p-4 z-50">
+        <div class="absolute top-0 left-0 p-4 z-50 flex space-x-4 player-back-button player-controls-fade">
             <button id="close-player-button" class="text-white text-xl p-3 bg-black/50 rounded-full hover:bg-black/70 transition duration-150">
                 <i class="fa-solid fa-arrow-left mr-2"></i> Back to Details
             </button>
+        </div>
+        
+        <!-- Custom Audio/Subtitle Controls -->
+        <div id="custom-player-controls" class="absolute top-0 right-0 p-4 z-50 flex space-x-4 player-controls-fade">
+            <!-- Audio Track Selector -->
+            <div class="relative">
+                <button id="audio-track-button" class="text-white p-3 bg-black/50 rounded-full hover:bg-black/70 transition duration-150" title="Audio Tracks">
+                    <i class="fa-solid fa-volume-high"></i>
+                </button>
+                <div id="audio-track-menu" class="absolute right-0 top-12 bg-bg-deep border border-border-dark rounded-lg shadow-lg min-w-48 hidden z-60">
+                    <div class="p-2 text-sm text-text-secondary border-b border-border-dark">Audio Tracks</div>
+                    <div id="audio-track-list" class="max-h-60 overflow-y-auto">
+                        <!-- Audio tracks will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subtitle Track Selector -->
+            <div class="relative">
+                <button id="subtitle-track-button" class="text-white p-3 bg-black/50 rounded-full hover:bg-black/70 transition duration-150" title="Subtitles">
+                    <i class="fa-solid fa-closed-captioning"></i>
+                </button>
+                <div id="subtitle-track-menu" class="absolute right-0 top-12 bg-bg-deep border border-border-dark rounded-lg shadow-lg min-w-48 hidden z-60">
+                    <div class="p-2 text-sm text-text-secondary border-b border-border-dark">Subtitles</div>
+                    <div id="subtitle-track-list" class="max-h-60 overflow-y-auto">
+                        <!-- Subtitle tracks will be populated here -->
+                    </div>
+                </div>
+            </div>
         </div>
         
         <video id="otaku-video-player" class="video-js vjs-default-skin w-full h-full object-contain" controls autoplay></video>

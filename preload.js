@@ -30,6 +30,22 @@ contextBridge.exposeInMainWorld('api', {
     savePlaybackProgress: (showId, episodeId, currentTime, duration, isFinished) =>
         ipcRenderer.invoke('save-playback-progress', showId, episodeId, currentTime, duration, isFinished),
 
-    // IPC handler for starting FFmpeg streaming
-    startFFmpegStream: (fullPath) => ipcRenderer.invoke('start-ffmpeg-stream', fullPath)
+    // IPC handler for starting video playback (direct or transcoded)
+    startVideoPlayback: (fullPath, options) => ipcRenderer.invoke('start-video-playback', fullPath, options),
+
+    // IPC handler for starting FFmpeg streaming (legacy compatibility)
+    startFFmpegStream: (fullPath, options) => ipcRenderer.invoke('start-ffmpeg-stream', fullPath, options),
+
+    // IPC handler for getting media metadata (audio/subtitle tracks)
+    getMediaMetadata: (filePath) => ipcRenderer.invoke('get-media-metadata', filePath),
+
+    // Helper function to switch audio track
+    switchAudioTrack: async (trackIndex) => {
+        try {
+            const response = await fetch(`http://localhost:8080/switch-audio?track=${trackIndex}`);
+            return await response.json();
+        } catch (error) {
+            return { success: false, message: error.message };
+        }
+    }
 });

@@ -12,7 +12,8 @@ let appState = {
   currentPlaying: {
       showId: null,
       episodeId: null,
-      fullPath: null
+      fullPath: null,
+      metadata: null
   }
 };
 
@@ -38,7 +39,14 @@ const elements = {
   anilistToggle: document.getElementById('anilist-toggle'),
   anilistApiKeySection: document.getElementById('anilist-api-key-section'),
   anilistApiKeyInput: document.getElementById('anilist-api-key'),
-  anilistApiSettingsBtn: document.getElementById('anilist-api-settings-btn')
+  anilistApiSettingsBtn: document.getElementById('anilist-api-settings-btn'),
+  // Track selection elements
+  audioTrackButton: document.getElementById('audio-track-button'),
+  audioTrackMenu: document.getElementById('audio-track-menu'),
+  audioTrackList: document.getElementById('audio-track-list'),
+  subtitleTrackButton: document.getElementById('subtitle-track-button'),
+  subtitleTrackMenu: document.getElementById('subtitle-track-menu'),
+  subtitleTrackList: document.getElementById('subtitle-track-list')
 };
 
 const accentColor = '#a855f7';
@@ -155,6 +163,53 @@ async function saveProgress(isFinished = false) {
     }
 }
 
+function setInitialTime() {
+    const video = playerInstance;
+    const episode = findEpisodeById(appState.currentPlaying.episodeId);
+    
+    const currentTime = video.currentTime();
+    const duration = video.duration();
+
+    console.log(`[PLAYER] Duration detected: ${duration}s, Current time: ${currentTime}s`);
+
+    // If duration is not available, try to get it from metadata
+    if (!duration || isNaN(duration) || duration === Infinity) {
+        console.log('[PLAYER] Duration not available, trying to get from metadata...');
+        
+        // Try to get duration from stored metadata
+        const metadata = appState.currentPlaying.metadata;
+        if (metadata && metadata.duration) {
+            console.log(`[PLAYER] Using metadata duration: ${metadata.duration}s`);
+            // Video.js doesn't have a direct way to set duration, but we can trigger an event
+            video.trigger('durationchange');
+        }
+        
+        // Set up a listener for when duration becomes available
+        video.on('durationchange', () => {
+            const newDuration = video.duration();
+            console.log(`[PLAYER] Duration changed to: ${newDuration}s`);
+            if (newDuration && !isNaN(newDuration) && newDuration !== Infinity) {
+                setStatus(`Video loaded (${Math.floor(newDuration / 60)}:${String(Math.floor(newDuration % 60)).padStart(2, '0')})`, false, false);
+            }
+        });
+    }
+
+    if (episode && episode.currentTime > 0) {
+        video.currentTime(Math.max(0, episode.currentTime - 1)); 
+        setStatus(`Resuming playback for ${episode.title} at ${Math.floor(episode.currentTime)}s.`, false, false);
+    } else {
+        setStatus('Playback started.', false, false);
+    }
+    
+    window.api.savePlaybackProgress(
+        appState.currentPlaying.showId, 
+        appState.currentPlaying.episodeId, 
+        video.currentTime(), 
+        video.duration() || 0, 
+        false
+    );
+}
+
 function setupPlayerListeners() {
     const video = playerInstance;
     
@@ -165,7 +220,6 @@ function setupPlayerListeners() {
     video.off('ended', saveProgress);
     video.on('ended', () => {
         saveProgress(true);
-        // MINIMAL CHANGE A (Fix): Removed automatic close. Let the user close the player.
         setStatus('Playback finished. Click the X to return to the library.', false, false);
     });
 
@@ -174,35 +228,532 @@ function setupPlayerListeners() {
 
     video.off('loadedmetadata', setInitialTime);
     video.on('loadedmetadata', setInitialTime);
+    
+    // Additional listeners for timeline/duration issues
+    video.off('loadeddata');
+    video.on('loadeddata', () => {
+        console.log('[PLAYER] Video data loaded, duration:', video.duration());
+    });
+    
+    video.off('canplay');
+    video.on('canplay', () => {
+        console.log('[PLAYER] Video can start playing, duration:', video.duration());
+        const duration = video.duration();
+        if (duration && !isNaN(duration) && duration !== Infinity) {
+            setStatus(`Ready to play (${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2, '0')})`, false, false);
+        }
+    });
+    
+    video.off('progress');
+    video.on('progress', () => {
+        // This helps with buffering indication
+        const buffered = video.buffered();
+        if (buffered.length > 0) {
+            const bufferedEnd = buffered.end(buffered.length - 1);
+            const duration = video.duration();
+            if (duration && !isNaN(duration)) {
+                const percentBuffered = (bufferedEnd / duration) * 100;
+                console.log(`[PLAYER] Buffered: ${percentBuffered.toFixed(1)}%`);
+            }
+        }
+    });
 }
 
-function setInitialTime() {
-    const video = playerInstance;
-    const episode = findEpisodeById(appState.currentPlaying.episodeId);
-    
-    const currentTime = video.currentTime();
-    const duration = video.duration();
+// --- AUTO-HIDE CONTROLS ---
+let mouseInactiveTimer = null;
+let isMouseOverVideo = false;
 
-    if (episode && episode.currentTime > 0) {
-        video.currentTime(Math.max(0, episode.currentTime - 1)); 
-        setStatus(`Resuming playback for ${episode.title} at ${Math.floor(episode.currentTime)}s.`, false, false);
-    } else {
-        setStatus('Playback started.', false, false);
+function setupAutoHideControls() {
+    const playerContainer = elements.playerView;
+    const videoElement = elements.videoPlayer;
+    
+    console.log('[CONTROLS] setupAutoHideControls called', { playerContainer, videoElement });
+    
+    if (!playerContainer || !videoElement) {
+        console.log('[CONTROLS] Missing elements, cannot setup auto-hide');
+        return;
     }
-    window.api.savePlaybackProgress(
-        appState.currentPlaying.showId, 
-        appState.currentPlaying.episodeId, 
-        video.currentTime(), 
-        video.duration(), 
-        false
-    );
+    
+    // Get custom UI elements
+    const customControls = document.getElementById('custom-player-controls');
+    const backButton = document.getElementById('close-player-button');
+    
+    console.log('[CONTROLS] Custom elements found:', { customControls, backButton });
+    
+    // Show controls when mouse moves
+    function showControls() {
+        console.log('[CONTROLS] showControls called, playerInstance:', !!playerInstance);
+        
+        if (playerInstance) {
+            playerInstance.userActive(true);
+            console.log('[CONTROLS] Set Video.js userActive to true');
+        }
+        
+        // Show custom UI elements
+        if (customControls) {
+            customControls.style.opacity = '1';
+            customControls.style.visibility = 'visible';
+            console.log('[CONTROLS] Showed custom controls');
+        }
+        if (backButton) {
+            backButton.style.opacity = '1';
+            backButton.style.visibility = 'visible';
+            console.log('[CONTROLS] Showed back button');
+        }
+        
+        // Clear existing timer
+        if (mouseInactiveTimer) {
+            clearTimeout(mouseInactiveTimer);
+            mouseInactiveTimer = null;
+        }
+        
+        console.log('[CONTROLS] Mouse active - showing controls');
+    }
+    
+    // Hide controls after inactivity
+    function hideControls() {
+        console.log('[CONTROLS] hideControls called', { playerInstance: !!playerInstance, isMouseOverVideo });
+        
+        if (playerInstance && isMouseOverVideo) {
+            playerInstance.userActive(false);
+            console.log('[CONTROLS] Set Video.js userActive to false');
+            
+            // Hide custom UI elements
+            if (customControls) {
+                customControls.style.opacity = '0';
+                customControls.style.visibility = 'hidden';
+                console.log('[CONTROLS] Hid custom controls');
+            }
+            if (backButton) {
+                backButton.style.opacity = '0';
+                backButton.style.visibility = 'hidden';
+                console.log('[CONTROLS] Hid back button');
+            }
+            
+            console.log('[CONTROLS] Mouse inactive - hiding controls');
+        }
+    }
+    
+    // Mouse move handler
+    function onMouseMove() {
+        if (!isMouseOverVideo) return;
+        
+        showControls();
+        
+        // Set timer to hide controls after 3 seconds of inactivity
+        if (mouseInactiveTimer) {
+            clearTimeout(mouseInactiveTimer);
+        }
+        
+        mouseInactiveTimer = setTimeout(hideControls, 3000);
+    }
+    
+    // Mouse enter/leave handlers
+    function onMouseEnter() {
+        isMouseOverVideo = true;
+        showControls();
+        console.log('[CONTROLS] Mouse entered video area');
+    }
+    
+    function onMouseLeave() {
+        isMouseOverVideo = false;
+        hideControls();
+        console.log('[CONTROLS] Mouse left video area');
+        
+        if (mouseInactiveTimer) {
+            clearTimeout(mouseInactiveTimer);
+            mouseInactiveTimer = null;
+        }
+    }
+    
+    // Add event listeners
+    playerContainer.addEventListener('mousemove', onMouseMove);
+    playerContainer.addEventListener('mouseenter', onMouseEnter);
+    playerContainer.addEventListener('mouseleave', onMouseLeave);
+    
+    // Also handle touch events for mobile
+    playerContainer.addEventListener('touchstart', showControls);
+    playerContainer.addEventListener('touchmove', showControls);
+    
+    // Show controls initially
+    showControls();
+    
+    // Cleanup function (called when player is disposed)
+    if (playerInstance) {
+        playerInstance.on('dispose', () => {
+            playerContainer.removeEventListener('mousemove', onMouseMove);
+            playerContainer.removeEventListener('mouseenter', onMouseEnter);
+            playerContainer.removeEventListener('mouseleave', onMouseLeave);
+            playerContainer.removeEventListener('touchstart', showControls);
+            playerContainer.removeEventListener('touchmove', showControls);
+            
+            if (mouseInactiveTimer) {
+                clearTimeout(mouseInactiveTimer);
+                mouseInactiveTimer = null;
+            }
+        });
+    }
+}
+
+// --- TRACK MANAGEMENT FUNCTIONS ---
+
+function formatLanguage(langCode) {
+    const languageMap = {
+        'jpn': 'Japanese',
+        'eng': 'English', 
+        'spa': 'Spanish',
+        'fre': 'French',
+        'ger': 'German',
+        'kor': 'Korean',
+        'chi': 'Chinese',
+        'rus': 'Russian',
+        'por': 'Portuguese',
+        'ita': 'Italian',
+        'und': 'Unknown'
+    };
+    return languageMap[langCode] || langCode.toUpperCase();
+}
+
+function populateAudioTracks(audioTracks) {
+    const audioList = elements.audioTrackList;
+    if (!audioList) return;
+    
+    audioList.innerHTML = '';
+    
+    audioTracks.forEach((track, index) => {
+        const trackItem = document.createElement('div');
+        trackItem.className = 'track-menu-item p-3 flex justify-between items-center border-b border-border-dark last:border-b-0';
+        trackItem.setAttribute('data-track-index', index); // Use array index, not track.index
+        
+        const trackInfo = document.createElement('div');
+        trackInfo.innerHTML = `
+            <div class="font-medium">${track.title}</div>
+            <div class="text-xs text-text-secondary">${track.codec.toUpperCase()} • ${track.channels}ch • ${Math.round(track.sampleRate/1000)}kHz</div>
+        `;
+        
+        const languageTag = document.createElement('span');
+        languageTag.className = 'track-language-tag';
+        languageTag.textContent = formatLanguage(track.language);
+        
+        trackItem.appendChild(trackInfo);
+        trackItem.appendChild(languageTag);
+        
+        // Set first track as active by default
+        if (index === 0) {
+            trackItem.classList.add('active');
+        }
+        
+        trackItem.addEventListener('click', () => selectAudioTrack(index, trackItem)); // Use array index
+        audioList.appendChild(trackItem);
+    });
+}
+
+function populateSubtitleTracks(subtitleTracks) {
+    const subtitleList = elements.subtitleTrackList;
+    if (!subtitleList) return;
+    
+    subtitleList.innerHTML = '';
+    
+    // Add "None" option
+    const noneItem = document.createElement('div');
+    noneItem.className = 'track-menu-item p-3 flex justify-between items-center border-b border-border-dark active';
+    noneItem.setAttribute('data-track-index', '-1');
+    noneItem.innerHTML = `
+        <div class="font-medium">None</div>
+        <span class="track-language-tag">OFF</span>
+    `;
+    noneItem.addEventListener('click', () => selectSubtitleTrack(-1, noneItem));
+    subtitleList.appendChild(noneItem);
+    
+    subtitleTracks.forEach((track) => {
+        const trackItem = document.createElement('div');
+        trackItem.className = 'track-menu-item p-3 flex justify-between items-center border-b border-border-dark last:border-b-0';
+        trackItem.setAttribute('data-track-index', track.index);
+        
+        const trackInfo = document.createElement('div');
+        const forcedText = track.forced ? ' [FORCED]' : '';
+        trackInfo.innerHTML = `
+            <div class="font-medium">${track.title}${forcedText}</div>
+            <div class="text-xs text-text-secondary">${track.codec.toUpperCase()}</div>
+        `;
+        
+        const languageTag = document.createElement('span');
+        languageTag.className = 'track-language-tag';
+        languageTag.textContent = formatLanguage(track.language);
+        
+        trackItem.appendChild(trackInfo);
+        trackItem.appendChild(languageTag);
+        
+        trackItem.addEventListener('click', () => selectSubtitleTrack(track.index, trackItem));
+        subtitleList.appendChild(trackItem);
+    });
+}
+
+async function selectAudioTrack(trackIndex, selectedElement) {
+    // Update UI
+    document.querySelectorAll('#audio-track-list .track-menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    selectedElement.classList.add('active');
+    
+    // Hide menu
+    elements.audioTrackMenu.classList.add('hidden');
+    
+    if (!playerInstance) {
+        console.error('[PLAYER] No player instance available');
+        return;
+    }
+    
+    // Save current playback position and playing state
+    const currentTime = playerInstance.currentTime();
+    const wasPlaying = !playerInstance.paused();
+    
+    try {
+        setStatus('Switching audio track...', false, true);
+        
+        // First, notify server about the audio track selection
+        const switchResponse = await window.api.switchAudioTrack(trackIndex);
+        
+        if (switchResponse.success) {
+            console.log(`[PLAYER] Audio track selected: ${switchResponse.message}`);
+            
+            // Dispose current player to ensure clean restart
+            if (playerInstance) {
+                playerInstance.pause();
+                playerInstance.dispose();
+                playerInstance = null;
+            }
+            
+            // Wait a moment for cleanup
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Restart the player completely with new audio track
+            await restartPlayerWithAudioTrack(trackIndex, currentTime, wasPlaying);
+            
+        } else {
+            console.error('[PLAYER] Failed to switch audio track:', switchResponse.message);
+            setStatus(`Error switching audio track: ${switchResponse.message}`, true, false);
+        }
+    } catch (error) {
+        console.error('[PLAYER] Error during audio track switch:', error);
+        setStatus(`Error switching audio track: ${error.message}`, true, false);
+    }
+}
+
+async function restartPlayerWithAudioTrack(trackIndex, resumeTime, autoplay) {
+    try {
+        // Ensure video element exists and is clean
+        let videoElement = document.getElementById('otaku-video-player');
+        if (videoElement) {
+            videoElement.innerHTML = '';
+            videoElement.removeAttribute('src');
+        } else {
+            // Recreate video element if it doesn't exist
+            const playerView = document.getElementById('player-view');
+            videoElement = document.createElement('video');
+            videoElement.id = 'otaku-video-player';
+            videoElement.className = 'video-js vjs-default-skin w-full h-full object-contain';
+            videoElement.setAttribute('controls', '');
+            playerView.appendChild(videoElement);
+        }
+        
+        // Initialize new Video.js player with subtitle support
+        playerInstance = videojs(videoElement, {
+            controls: true,
+            autoplay: autoplay,
+            fluid: true,
+            responsive: true,
+            preload: 'auto',
+            html5: {
+                vhs: {
+                    overrideNative: true
+                },
+                nativeTextTracks: false
+            },
+            textTrackDisplay: {
+                allowMultipleShowingTracks: false
+            }
+        });
+        
+        // Start new stream with selected audio track
+        const streamResponse = await window.api.startFFmpegStream(
+            appState.currentPlaying.fullPath, 
+            { audioTrack: trackIndex }
+        );
+        
+        if (streamResponse.success) {
+                // Set the source for the new player
+                let videoType = 'video/mp4'; // Default for transcoded content
+                if (streamResponse.format && !streamResponse.needsTranscoding) {
+                    switch (streamResponse.format) {
+                        case '.mp4':
+                            videoType = 'video/mp4';
+                            break;
+                        case '.webm':
+                            videoType = 'video/webm';
+                            break;
+                        default:
+                            videoType = 'video/mp4';
+                    }
+                } else {
+                    // All transcoded content is MP4
+                    videoType = 'video/mp4';
+                }
+                
+                playerInstance.src({
+                    src: streamResponse.url,
+                    type: videoType
+                });            // Set up event listeners
+            setupPlayerListeners();
+            
+            // Wait for metadata and restore position
+            playerInstance.one('loadedmetadata', () => {
+                if (resumeTime > 0) {
+                    playerInstance.currentTime(resumeTime);
+                    console.log(`[PLAYER] Restored playback position to ${resumeTime}s`);
+                }
+                
+                if (autoplay) {
+                    playerInstance.play().catch(err => {
+                        console.log('[PLAYER] Autoplay prevented:', err);
+                    });
+                }
+            });
+            
+            const trackName = appState.currentPlaying.metadata.audioTracks[trackIndex]?.title || `Audio Track ${trackIndex + 1}`;
+            setStatus(`Switched to ${trackName}`, false, false);
+            console.log(`[PLAYER] Successfully switched to audio track ${trackIndex}: ${trackName}`);
+            
+        } else {
+            console.error('[PLAYER] Failed to start new stream:', streamResponse.message);
+            setStatus(`Error restarting stream: ${streamResponse.message}`, true, false);
+        }
+    } catch (error) {
+        console.error('[PLAYER] Error restarting player:', error);
+        setStatus(`Error restarting player: ${error.message}`, true, false);
+    }
+}
+
+function selectSubtitleTrack(trackIndex, selectedElement) {
+    // Update UI
+    document.querySelectorAll('#subtitle-track-list .track-menu-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    selectedElement.classList.add('active');
+    
+    // Hide menu
+    elements.subtitleTrackMenu.classList.add('hidden');
+    
+    if (trackIndex === -1) {
+        // Disable all subtitles
+        if (playerInstance && playerInstance.textTracks) {
+            const textTracks = playerInstance.textTracks();
+            for (let i = 0; i < textTracks.length; i++) {
+                textTracks[i].mode = 'disabled';
+            }
+        }
+        console.log('[PLAYER] Disabled subtitles');
+        setStatus('Subtitles disabled', false, false);
+    } else {
+        // Enable selected subtitle track
+        const subtitleUrl = `http://localhost:8080/subtitle?track=${trackIndex}`;
+        
+        if (playerInstance) {
+            try {
+                // Remove all existing text tracks
+                const textTracks = playerInstance.textTracks();
+                for (let i = textTracks.length - 1; i >= 0; i--) {
+                    const track = textTracks[i];
+                    if (track.mode !== undefined) {
+                        track.mode = 'disabled';
+                    }
+                    try {
+                        playerInstance.removeRemoteTextTrack(track);
+                    } catch (e) {
+                        console.log('[SUBTITLE] Could not remove track:', e);
+                    }
+                }
+                
+                // Wait a moment for cleanup
+                setTimeout(() => {
+                    // Add new subtitle track
+                    const metadata = appState.currentPlaying.metadata;
+                    if (metadata && metadata.subtitleTracks[trackIndex]) {
+                        const track = metadata.subtitleTracks[trackIndex];
+                        
+                        const trackElement = playerInstance.addRemoteTextTrack({
+                            kind: 'subtitles',
+                            src: subtitleUrl,
+                            srclang: track.language || 'en',
+                            label: track.title,
+                            default: false
+                        }, false);
+                        
+                        // Enable the track after it's added
+                        setTimeout(() => {
+                            if (trackElement && trackElement.track) {
+                                trackElement.track.mode = 'showing';
+                                console.log(`[PLAYER] Subtitle track mode set to: ${trackElement.track.mode}`);
+                            }
+                            
+                            // Also try to enable via textTracks array
+                            const allTracks = playerInstance.textTracks();
+                            for (let i = 0; i < allTracks.length; i++) {
+                                if (allTracks[i].label === track.title) {
+                                    allTracks[i].mode = 'showing';
+                                    console.log(`[PLAYER] Found and enabled subtitle track: ${track.title}`);
+                                    break;
+                                }
+                            }
+                        }, 500);
+                        
+                        console.log(`[PLAYER] Added subtitle track ${trackIndex}: ${track.title} (${subtitleUrl})`);
+                        setStatus(`Enabled subtitles: ${track.title}`, false, false);
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('[PLAYER] Error handling subtitle track:', error);
+                setStatus(`Error enabling subtitles: ${error.message}`, true, false);
+            }
+        }
+    }
 }
 
 async function openPlayerView(showId, episodeId, fullPath) {
     console.log('[PLAYER] openPlayerView called for:', fullPath);
+    console.log('[DEBUG] Code version check - auto-hide and timeline fixes loaded');
 
-    // 1. Set state
-    appState.currentPlaying = { showId, episodeId, fullPath };
+    // 1. Get media metadata first
+    try {
+        setStatus('Loading media information...', false, true);
+        const metadataResponse = await window.api.getMediaMetadata(fullPath);
+        
+        if (!metadataResponse.success) {
+            console.error('[PLAYER] Failed to get metadata:', metadataResponse.message);
+            setStatus('Error: Failed to read media information', true, false);
+            return;
+        }
+        
+        console.log('[PLAYER] Media metadata loaded:', metadataResponse);
+        
+        // Set state with metadata
+        appState.currentPlaying = { 
+            showId, 
+            episodeId, 
+            fullPath, 
+            metadata: metadataResponse 
+        };
+        
+        // Populate track selection UI
+        populateAudioTracks(metadataResponse.audioTracks);
+        populateSubtitleTracks(metadataResponse.subtitleTracks);
+        
+    } catch (error) {
+        console.error('[PLAYER] Error loading metadata:', error);
+        setStatus('Error: Failed to load media information', true, false);
+        return;
+    }
     
     // 2. Dispose existing player to ensure clean state
     if (playerInstance) {
@@ -253,13 +804,21 @@ async function openPlayerView(showId, episodeId, fullPath) {
 
     // 6. Initialize Video.js player
     try {
-        // MINIMAL CHANGE B (Fix): Explicitly define the control bar to force the AudioTrackButton to appear.
         playerInstance = videojs(videoElement, {
             controls: true,
             autoplay: true,
             fluid: true,
             responsive: true,
             preload: 'auto',
+            html5: {
+                vhs: {
+                    overrideNative: true
+                },
+                nativeTextTracks: false
+            },
+            textTrackDisplay: {
+                allowMultipleShowingTracks: false
+            },
             controlBar: { 
                 children: [
                     'playToggle',
@@ -270,14 +829,12 @@ async function openPlayerView(showId, episodeId, fullPath) {
                     'remainingTimeDisplay',
                     'customControlSpacer',
                     'playbackRateMenuButton',
-                    'AudioTrackButton', // <--- THIS is the audio track selector button
-                    'chaptersButton',
                     'subsCapsButton',
                     'fullscreenToggle'
                 ]
             }
         });
-        console.log('[PLAYER] Video.js player initialized with explicit control bar.');
+        console.log('[PLAYER] Video.js player initialized with subtitle support.');
     } catch (error) {
         console.error('[PLAYER] Error initializing Video.js player:', error);
         setStatus('Error: Failed to initialize video player', true, false);
@@ -293,15 +850,91 @@ async function openPlayerView(showId, episodeId, fullPath) {
             console.log('[PLAYER] Stream URL received:', streamResponse.url);
             
             // 8. Set the source for the Video.js player
+            // Determine video type based on response format and transcoding status
+            let videoType = 'video/mp4'; // Default for transcoded content
+            if (streamResponse.format && !streamResponse.needsTranscoding) {
+                switch (streamResponse.format) {
+                    case '.mp4':
+                        videoType = 'video/mp4';
+                        break;
+                    case '.webm':
+                        videoType = 'video/webm';
+                        break;
+                    default:
+                        videoType = 'video/mp4';
+                }
+            } else {
+                // All transcoded content is MP4
+                videoType = 'video/mp4';
+            }
+
             playerInstance.src({
                 src: streamResponse.url,
-                type: 'video/mp4' // Matches the Content-Type set in main.js
+                type: videoType
             });
+
+            // For transcoded videos, manually set duration to enable timeline
+            if (streamResponse.needsTranscoding && appState.currentPlaying.metadata && appState.currentPlaying.metadata.duration) {
+                const duration = appState.currentPlaying.metadata.duration;
+                console.log(`[PLAYER] Setting duration for transcoded video: ${duration}s`);
+                
+                // Multiple approaches to set duration for timeline
+                const setupDuration = () => {
+                    console.log(`[PLAYER] setupDuration called, current duration: ${playerInstance.duration()}`);
+                    
+                    // Monkey patch the duration method to return the correct duration
+                    const originalDuration = playerInstance.duration.bind(playerInstance);
+                    playerInstance.duration = function(seconds) {
+                        if (typeof seconds !== 'undefined') {
+                            return originalDuration(seconds);
+                        }
+                        // Return the known duration from metadata
+                        console.log(`[PLAYER] Duration method called, returning: ${duration}`);
+                        return duration;
+                    };
+                    
+                    // Set the tech duration directly
+                    const tech = playerInstance.tech();
+                    if (tech && tech.el_) {
+                        console.log(`[PLAYER] Setting tech duration to: ${duration}`);
+                        tech.el_.duration = duration;
+                    }
+                    
+                    // Force update the progress control
+                    const progressControl = playerInstance.getChild('ControlBar').getChild('ProgressControl');
+                    if (progressControl) {
+                        console.log(`[PLAYER] Found progress control, updating`);
+                        progressControl.updateContent();
+                    }
+                    
+                    // Trigger duration change event to update UI
+                    playerInstance.trigger('durationchange');
+                    playerInstance.trigger('timeupdate');
+                    console.log(`[PLAYER] Duration patched for timeline: ${duration}s, triggered events`);
+                };
+                
+                // Try multiple times to ensure it works
+                playerInstance.ready(setupDuration);
+                playerInstance.on('loadedmetadata', setupDuration);
+                playerInstance.on('canplay', setupDuration);
+                playerInstance.on('playing', setupDuration);
+                
+                // Also try after delays
+                setTimeout(setupDuration, 500);
+                setTimeout(setupDuration, 1500);
+                setTimeout(setupDuration, 3000);
+            }
 
             // 9. Setup player listeners
             setupPlayerListeners();
             
-            // 10. Attempt to play the video
+            // 10. Setup auto-hide controls after a delay to ensure DOM is ready
+            setTimeout(() => {
+                console.log('[PLAYER] Setting up auto-hide controls after delay');
+                setupAutoHideControls();
+            }, 500);
+            
+            // 11. Attempt to play the video
             playerInstance.play().catch(error => {
                 console.error('[PLAYER] Playback error:', error);
                 setStatus(`Error playing video: ${error.message}`, true, false);
@@ -374,7 +1007,11 @@ function closePlayerView() {
     }
     
     // Reset current playing state
-    appState.currentPlaying = { showId: null, episodeId: null, fullPath: null };
+    appState.currentPlaying = { showId: null, episodeId: null, fullPath: null, metadata: null };
+    
+    // Hide track menus
+    if (elements.audioTrackMenu) elements.audioTrackMenu.classList.add('hidden');
+    if (elements.subtitleTrackMenu) elements.subtitleTrackMenu.classList.add('hidden');
     
     // MINIMAL CHANGE C (Fix): Refresh the episode list to reflect progress/watched status only when closing the player.
     const show = appState.shows.find(s => s.id === appState.selectedShowId);
@@ -751,4 +1388,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     elements.addLibraryButton.addEventListener('click', addLibraryPath);
+
+    // --- TRACK SELECTION EVENT LISTENERS ---
+    
+    // Audio track button
+    elements.audioTrackButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.audioTrackMenu.classList.toggle('hidden');
+        elements.subtitleTrackMenu.classList.add('hidden'); // Hide subtitle menu
+    });
+
+    // Subtitle track button  
+    elements.subtitleTrackButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        elements.subtitleTrackMenu.classList.toggle('hidden');
+        elements.audioTrackMenu.classList.add('hidden'); // Hide audio menu
+    });
+
+    // Close menus when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!elements.audioTrackButton.contains(e.target) && !elements.audioTrackMenu.contains(e.target)) {
+            elements.audioTrackMenu.classList.add('hidden');
+        }
+        if (!elements.subtitleTrackButton.contains(e.target) && !elements.subtitleTrackMenu.contains(e.target)) {
+            elements.subtitleTrackMenu.classList.add('hidden');
+        }
+    });
+
+    // Prevent menu from closing when clicking inside
+    elements.audioTrackMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    
+    elements.subtitleTrackMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 });
